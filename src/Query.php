@@ -196,8 +196,7 @@ class Query
 
     public static function resolveRelation(string $relation): ?string
     {
-        // Relationships are resolved via SOQL joins or additional queries.
-        // This method is as yet unsupported in this implementation.
+        // This method is as yet unsupported in this implementation and will likely be removed.
 
         return null;
     }

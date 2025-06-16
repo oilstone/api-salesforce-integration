@@ -11,10 +11,10 @@ class ServiceProvider extends BaseServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/config/salesforce-integration.php', 'salesforce-integration');
+        $this->mergeConfigFrom(__DIR__.'/config/salesforce.php', 'salesforce');
 
         $this->app->singleton(Salesforce::class, function () {
-            $config = config('salesforce-integration');
+            $config = config('salesforce');
 
             $client = new Client();
 
@@ -39,7 +39,7 @@ class ServiceProvider extends BaseServiceProvider
     public function boot(): void
     {
         $this->publishes([
-            __DIR__.'/config/salesforce-integration.php' => config_path('salesforce-integration.php'),
+            __DIR__.'/config/salesforce.php' => config_path('salesforce.php'),
         ], 'config');
     }
 }
