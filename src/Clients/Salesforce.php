@@ -12,16 +12,19 @@ class Salesforce
 
     protected string $accessToken;
 
-    public function __construct(Client $httpClient, string $instanceUrl, string $accessToken)
+    protected string $instanceVersion;
+
+    public function __construct(Client $httpClient, string $instanceUrl, string $accessToken, string $instanceVersion = 'v52.0')
     {
         $this->httpClient = $httpClient;
         $this->instanceUrl = rtrim($instanceUrl, '/');
         $this->accessToken = $accessToken;
+        $this->instanceVersion = $instanceVersion;
     }
 
     public function query(string $soql): array
     {
-        $response = $this->httpClient->request('GET', $this->instanceUrl.'/services/data/v52.0/query', [
+        $response = $this->httpClient->request('GET', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/query', [
             'headers' => [
                 'Authorization' => 'Bearer '.$this->accessToken,
                 'Accept' => 'application/json',
