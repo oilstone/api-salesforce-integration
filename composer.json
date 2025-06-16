@@ -1,0 +1,28 @@
+{
+    "name": "oilstone/api-salesforce-integration",
+    "description": "A Salesforce integration package for garethhudson07/api",
+    "type": "library",
+    "require": {
+        "garethhudson07/aggregate": "^1.2",
+        "garethhudson07/api": "^9.5",
+        "nesbot/carbon": "^3.10",
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "require-dev": {
+        "laravel/framework": "^11.0",
+        "oilstone/api-resource-loader": "^5.3",
+        "psr/http-message": "^1.0"
+    },
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Oilstone\\ApiSalesforceIntegration\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Brendan Bullen",
+            "email": "66941+bullenb@users.noreply.github.com"
+        }
+    ]
+}
