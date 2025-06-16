@@ -18,7 +18,7 @@ the configuration file:
 php artisan vendor:publish --tag=config --provider="Oilstone\\ApiSalesforceIntegration\\Integrations\\Laravel\\ServiceProvider"
 ```
 
-The `config/salesforce-integration.php` file allows you to specify your
+The `config/salesforce.php` file allows you to specify your
 Salesforce instance details and credentials:
 
 ```php
