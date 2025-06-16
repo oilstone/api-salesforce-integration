@@ -15,6 +15,21 @@ class Query
 
     protected array $selects = ['Id'];
 
+    /**
+     * @var array<string, mixed>
+     */
+    protected array $relationships = [];
+
+    /**
+     * Stored query constraints.
+     *
+     * Each condition item may contain:
+     *  - boolean: and|or
+     *  - type: basic|nested|in
+     *  - field: string
+     *  - operator: string
+     *  - value|values|conditions
+     */
     protected array $conditions = [];
 
     protected array $orders = [];
@@ -48,8 +63,8 @@ class Query
 
     public function with(string $relation): static
     {
-        // Relationships are resolved via SOQL joins or additional queries.
-        // This method is as yet unsupported in this implementation.
+        $this->relationships[] = $relation;
+
         return $this;
     }
 
@@ -62,6 +77,53 @@ class Query
 
     public function where(...$arguments): static
     {
+        return $this->addCondition('and', ...$arguments);
+    }
+
+    public function orWhere(...$arguments): static
+    {
+        return $this->addCondition('or', ...$arguments);
+    }
+
+    public function whereIn(string $field, array $values): static
+    {
+        return $this->addCondition('and', $field, 'in', $values);
+    }
+
+    public function orWhereIn(string $field, array $values): static
+    {
+        return $this->addCondition('or', $field, 'in', $values);
+    }
+
+    public function whereNotIn(string $field, array $values): static
+    {
+        return $this->addCondition('and', $field, 'not in', $values);
+    }
+
+    public function orWhereNotIn(string $field, array $values): static
+    {
+        return $this->addCondition('or', $field, 'not in', $values);
+    }
+
+    protected function addCondition(string $boolean, ...$arguments): static
+    {
+        if (! $arguments) {
+            throw new InvalidQueryArgumentsException;
+        }
+
+        if ($arguments[0] instanceof \Closure) {
+            $nested = new static($this->object, $this->client);
+            $arguments[0]($nested);
+
+            $this->conditions[] = [
+                'boolean' => $boolean,
+                'type' => 'nested',
+                'conditions' => $nested->conditions,
+            ];
+
+            return $this;
+        }
+
         if (count($arguments) < 2 || count($arguments) > 3) {
             throw new InvalidQueryArgumentsException;
         }
@@ -70,13 +132,28 @@ class Query
         $value = $arguments[2] ?? $arguments[1];
         $operator = count($arguments) === 3 ? mb_strtolower($arguments[1]) : '=';
 
-        $supported = ['=', '!=', '>', '>=', '<', '<=', 'like'];
+        $supported = ['=', '!=', '>', '>=', '<', '<=', 'like', 'in', 'not in'];
 
         if (! in_array($operator, $supported)) {
             throw new UnknownOperatorException($operator);
         }
 
-        $this->conditions[] = [$field, $operator, $value];
+        $type = in_array($operator, ['in', 'not in']) ? 'in' : 'basic';
+
+        $condition = [
+            'boolean' => $boolean,
+            'type' => $type,
+            'field' => $field,
+            'operator' => $operator,
+        ];
+
+        if ($type === 'in') {
+            $condition['values'] = $value;
+        } else {
+            $condition['value'] = $value;
+        }
+
+        $this->conditions[] = $condition;
 
         return $this;
     }
@@ -127,22 +204,11 @@ class Query
 
     protected function toSoql(): string
     {
-        $select = implode(', ', $this->selects ?: ['Id']);
+        $select = implode(', ', array_merge($this->selects ?: ['Id'], $this->relationships));
         $query = "SELECT {$select} FROM {$this->object}";
 
         if ($this->conditions) {
-            $clauses = [];
-            foreach ($this->conditions as [$field, $operator, $value]) {
-                if ($operator === 'like') {
-                    $value = "'%".addslashes(trim($value, '%'))."%'";
-                    $operator = 'LIKE';
-                } else {
-                    $value = is_numeric($value) ? $value : "'".addslashes($value)."'";
-                    $operator = strtoupper($operator);
-                }
-                $clauses[] = "{$field} {$operator} {$value}";
-            }
-            $query .= ' WHERE '.implode(' AND ', $clauses);
+            $query .= ' WHERE '.$this->compileConditions($this->conditions);
         }
 
         if ($this->orders) {
@@ -159,5 +225,50 @@ class Query
         }
 
         return $query;
+    }
+
+    protected function compileConditions(array $conditions): string
+    {
+        $sql = '';
+        foreach ($conditions as $index => $condition) {
+            if ($index > 0) {
+                $sql .= ' '.strtoupper($condition['boolean']).' ';
+            }
+
+            if ($condition['type'] === 'nested') {
+                $sql .= '('.$this->compileConditions($condition['conditions']).')';
+                continue;
+            }
+
+            if ($condition['type'] === 'in') {
+                $values = array_map(function ($v) {
+                    return is_numeric($v) ? $v : "'".addslashes($v)."'";
+                }, $condition['values']);
+
+                $sql .= sprintf(
+                    '%s %s (%s)',
+                    $condition['field'],
+                    strtoupper($condition['operator']),
+                    implode(', ', $values)
+                );
+
+                continue;
+            }
+
+            $value = $condition['value'];
+            $operator = $condition['operator'];
+
+            if ($operator === 'like') {
+                $value = "'%".addslashes(trim($value, '%'))."%'";
+                $operator = 'LIKE';
+            } else {
+                $value = is_numeric($value) ? $value : "'".addslashes($value)."'";
+                $operator = strtoupper($operator);
+            }
+
+            $sql .= sprintf('%s %s %s', $condition['field'], $operator, $value);
+        }
+
+        return $sql;
     }
 }
