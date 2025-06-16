@@ -19,6 +19,13 @@
             "Oilstone\\ApiSalesforceIntegration\\": "src/"
         }
     },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Oilstone\\ApiSalesforceIntegration\\Integrations\\Laravel\\ServiceProvider"
+            ]
+        }
+    },
     "authors": [
         {
             "name": "Brendan Bullen",
