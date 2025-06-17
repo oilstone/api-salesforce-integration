@@ -19,6 +19,29 @@ class Repository implements RepositoryInterface
 
     protected ?Schema $schema;
 
+    /**
+     * @var array<int, callable>
+     */
+    protected array $defaultConstraints = [];
+
+    public function setDefaultConstraints(array $constraints): static
+    {
+        $this->defaultConstraints = [];
+
+        foreach ($constraints as $constraint) {
+            $this->addDefaultConstraint($constraint);
+        }
+
+        return $this;
+    }
+
+    public function addDefaultConstraint(callable $constraint): static
+    {
+        $this->defaultConstraints[] = $constraint;
+
+        return $this;
+    }
+
     public function __construct(?string $object = null, ?Schema $schema = null, ?Sentinel $sentinel = null)
     {
         if (property_exists($this, 'sentinel')) {
@@ -32,7 +55,7 @@ class Repository implements RepositoryInterface
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
     {
         return (new QueryResolver(
-            new Query($this->object, $this->getClient()),
+            $this->newQuery(),
             $pipe,
             $this->getDefaultFields(),
         ))->byKey();
@@ -42,7 +65,7 @@ class Repository implements RepositoryInterface
     {
         return Collection::make(
             (new QueryResolver(
-                new Query($request->getQueryParams()['object'] ?? $this->object, $this->getClient($request)),
+                $this->newQuery($request, $request->getQueryParams()['object'] ?? null),
                 $pipe,
                 $this->getDefaultFields(),
             ))->collection($request)->all()
@@ -52,7 +75,7 @@ class Repository implements RepositoryInterface
     public function getRecord(Pipe $pipe, ServerRequestInterface $request): ?ResultRecordInterface
     {
         return (new QueryResolver(
-            new Query($request->getQueryParams()['object'] ?? $this->object, $this->getClient($request)),
+            $this->newQuery($request, $request->getQueryParams()['object'] ?? null),
             $pipe,
             $this->getDefaultFields(),
         ))->record($request);
@@ -76,6 +99,17 @@ class Repository implements RepositoryInterface
     protected function getClient(?ServerRequestInterface $request = null): Salesforce
     {
         return app(Salesforce::class);
+    }
+
+    protected function newQuery(?ServerRequestInterface $request = null, ?string $object = null): Query
+    {
+        $query = new Query($object ?? $this->object, $this->getClient($request));
+
+        foreach ($this->defaultConstraints as $constraint) {
+            $constraint($query);
+        }
+
+        return $query;
     }
 
     protected function getDefaultFields(): array
