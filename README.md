@@ -44,3 +44,18 @@ $resource->setObject('Account')
     ->addConstraint(fn ($query) => $query->where('Type', 'Customer'))
     ->addConstraint(fn ($query) => $query->where('RecordTypeId', '0123...'));
 ```
+
+When extending the provided `Resource` class you may override the
+`constraints` method to declare default repository constraints:
+
+```php
+class University extends Resource
+{
+    protected ?string $object = 'Account';
+
+    protected function constraints(): array
+    {
+        return [fn ($query) => $query->where('Type', 'University')];
+    }
+}
+```
