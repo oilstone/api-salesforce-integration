@@ -14,9 +14,15 @@ class Resource extends BaseResource
 {
     protected ?string $object;
 
+    /**
+     * @var array<int, callable>
+     */
+    protected array $constraints = [];
+
     public function repository(?Sentinel $sentinel = null): ?RepositoryContract
     {
-        return new Repository($this->object, $this->makeSchema(), $sentinel);
+        return (new Repository($this->object, $this->makeSchema(), $sentinel))
+            ->setDefaultConstraints($this->constraints);
     }
 
     public function transformer(BaseSchema $schema): ?TransformerContract
@@ -32,6 +38,24 @@ class Resource extends BaseResource
     public function setObject(?string $object): static
     {
         $this->object = $object;
+
+        return $this;
+    }
+
+    public function setConstraints(array $constraints): static
+    {
+        $this->constraints = [];
+
+        foreach ($constraints as $constraint) {
+            $this->addConstraint($constraint);
+        }
+
+        return $this;
+    }
+
+    public function addConstraint(callable $constraint): static
+    {
+        $this->constraints[] = $constraint;
 
         return $this;
     }

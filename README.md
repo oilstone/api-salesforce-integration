@@ -32,3 +32,15 @@ return [
 
 The service provider retrieves an access token using these values and caches it
 for subsequent requests using Laravel's cache facade.
+
+## Repository constraints
+
+When creating a repository you may specify default constraints that are applied
+to every query. Constraints are provided as callbacks that receive the query
+builder instance:
+
+```php
+$resource->setObject('Account')
+    ->addConstraint(fn ($query) => $query->where('Type', 'Customer'))
+    ->addConstraint(fn ($query) => $query->where('RecordTypeId', '0123...'));
+```
