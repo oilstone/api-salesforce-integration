@@ -9,20 +9,36 @@ use Api\Result\Contracts\Collection as ResultCollectionInterface;
 use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
+use Oilstone\ApiSalesforceIntegration\Exceptions\MethodNotAllowedException;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Psr\Http\Message\ServerRequestInterface;
-use Oilstone\ApiSalesforceIntegration\Exceptions\MethodNotAllowedException;
 
 class Repository implements RepositoryInterface
 {
     protected ?string $object;
 
-    protected ?Schema $schema;
+    protected ?Schema $schema = null;
 
     /**
      * @var array<int, callable>
      */
     protected array $defaultConstraints = [];
+
+    public function __construct(?string $object = null, ?Sentinel $sentinel = null)
+    {
+        if (property_exists($this, 'sentinel')) {
+            $this->sentinel = $sentinel;
+        }
+
+        $this->object = $object;
+    }
+
+    public function setSchema(Schema $schema): static
+    {
+        $this->schema = $schema;
+
+        return $this;
+    }
 
     public function setDefaultConstraints(array $constraints): static
     {
@@ -40,16 +56,6 @@ class Repository implements RepositoryInterface
         $this->defaultConstraints[] = $constraint;
 
         return $this;
-    }
-
-    public function __construct(?string $object = null, ?Schema $schema = null, ?Sentinel $sentinel = null)
-    {
-        if (property_exists($this, 'sentinel')) {
-            $this->sentinel = $sentinel;
-        }
-
-        $this->object = $object;
-        $this->schema = $schema;
     }
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface

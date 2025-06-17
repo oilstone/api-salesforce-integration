@@ -21,7 +21,8 @@ class Resource extends BaseResource
 
     public function repository(?Sentinel $sentinel = null): ?RepositoryContract
     {
-        return (new Repository($this->object, $this->makeSchema(), $sentinel))
+        return (new Repository($this->object, $sentinel))
+            ->setSchema($this->makeSchema())
             ->setDefaultConstraints($this->constraints);
     }
 
