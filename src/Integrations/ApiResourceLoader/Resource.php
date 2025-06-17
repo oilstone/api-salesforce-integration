@@ -19,11 +19,19 @@ class Resource extends BaseResource
      */
     protected array $constraints = [];
 
+    /**
+     * @return array<int, callable>
+     */
+    protected function constraints(): array
+    {
+        return [];
+    }
+
     public function repository(?Sentinel $sentinel = null): ?RepositoryContract
     {
         return (new Repository($this->object, $sentinel))
             ->setSchema($this->makeSchema())
-            ->setDefaultConstraints($this->constraints);
+            ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints));
     }
 
     public function transformer(BaseSchema $schema): ?TransformerContract
