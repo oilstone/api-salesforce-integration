@@ -62,6 +62,9 @@ class Salesforce
 
         $data = json_decode((string) $response->getBody(), true);
 
-        return array_values(array_map(fn ($v) => $v['value'], $data['values'] ?? []));
+        return array_values(array_map(
+            fn ($v) => html_entity_decode($v['value'], ENT_QUOTES | ENT_HTML5),
+            $data['values'] ?? []
+        ));
     }
 }
