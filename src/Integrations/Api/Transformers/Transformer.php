@@ -25,6 +25,12 @@ class Transformer implements Contract
 
     public function transformMetaData(Record $record): array
     {
+        if (method_exists($record, 'getMetaData')) {
+            $meta = $record->getMetaData();
+
+            return is_array($meta) ? $meta : iterator_to_array($meta);
+        }
+
         return [];
     }
 
