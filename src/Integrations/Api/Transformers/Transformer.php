@@ -6,12 +6,11 @@ use Api\Result\Contracts\Record;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer as Contract;
 use Carbon\Carbon;
-use Oilstone\ApiSalesforceIntegration\Integrations\Api\Schema\Schema as SalesforceSchema;
 
 class Transformer implements Contract
 {
     public function __construct(
-        protected SalesforceSchema $schema
+        protected Schema $schema
     ) {}
 
     public function transform(Record $record): array

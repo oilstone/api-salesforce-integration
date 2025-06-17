@@ -13,6 +13,7 @@ class QueryResolver
     public function __construct(
         protected QueryBuilder $queryBuilder,
         protected Pipe $pipe,
+        protected array $defaultFields = [],
     ) { }
 
     public function byKey(): ?Record
@@ -35,7 +36,7 @@ class QueryResolver
         $parsedQuery = $request->getAttribute('parsedQuery');
 
         return (new Query($queryBuilder))->include($parsedQuery->getRelations())
-            ->select($parsedQuery->getFields())
+            ->select($parsedQuery->getFields() ?: $this->defaultFields ?: ['FIELDS(ALL)'])
             ->where($parsedQuery->getFilters())
             ->orderBy($parsedQuery->getSort())
             ->limit($parsedQuery->getLimit())

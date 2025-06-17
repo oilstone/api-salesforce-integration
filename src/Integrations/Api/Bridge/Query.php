@@ -55,7 +55,7 @@ class Query
     public function select(array $fields): self
     {
         if ($fields) {
-            $this->baseQuery->select(...$fields);
+            $this->baseQuery->select($fields);
         }
 
         return $this;
@@ -69,7 +69,7 @@ class Query
     public function orderBy(array $orders): self
     {
         foreach ($orders as $order) {
-            $this->baseQuery->orderBy(method_exists($order, 'getProperty') ? $order->getProperty() : 'fields.' . $order->getPropertyName(), $order->getDirection());
+            $this->baseQuery->orderBy(method_exists($order, 'getProperty') ? $order->getProperty() : $order->getPropertyName(), $order->getDirection());
         }
 
         return $this;

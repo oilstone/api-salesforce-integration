@@ -7,6 +7,7 @@ use Api\Pipeline\Pipes\Pipe;
 use Api\Repositories\Contracts\Resource as RepositoryInterface;
 use Api\Result\Contracts\Collection as ResultCollectionInterface;
 use Api\Result\Contracts\Record as ResultRecordInterface;
+use Api\Schema\Schema;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Psr\Http\Message\ServerRequestInterface;
@@ -16,20 +17,24 @@ class Repository implements RepositoryInterface
 {
     protected ?string $object;
 
-    public function __construct(?string $object = null, ?Sentinel $sentinel = null)
+    protected ?Schema $schema;
+
+    public function __construct(?string $object = null, ?Schema $schema = null, ?Sentinel $sentinel = null)
     {
         if (property_exists($this, 'sentinel')) {
             $this->sentinel = $sentinel;
         }
 
         $this->object = $object;
+        $this->schema = $schema;
     }
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
     {
         return (new QueryResolver(
             new Query($this->object, $this->getClient()),
-            $pipe
+            $pipe,
+            $this->getDefaultFields(),
         ))->byKey();
     }
 
@@ -38,7 +43,8 @@ class Repository implements RepositoryInterface
         return Collection::make(
             (new QueryResolver(
                 new Query($request->getQueryParams()['object'] ?? $this->object, $this->getClient($request)),
-                $pipe
+                $pipe,
+                $this->getDefaultFields(),
             ))->collection($request)->all()
         );
     }
@@ -47,7 +53,8 @@ class Repository implements RepositoryInterface
     {
         return (new QueryResolver(
             new Query($request->getQueryParams()['object'] ?? $this->object, $this->getClient($request)),
-            $pipe
+            $pipe,
+            $this->getDefaultFields(),
         ))->record($request);
     }
 
@@ -69,5 +76,26 @@ class Repository implements RepositoryInterface
     protected function getClient(?ServerRequestInterface $request = null): Salesforce
     {
         return app(Salesforce::class);
+    }
+
+    protected function getDefaultFields(): array
+    {
+        $fields = [];
+
+        if ($this->schema && $this->schema->getPrimary()) {
+            $fields[] = $this->schema->getPrimary()->alias ?: $this->schema->getPrimary()->getName();
+        }
+
+        if ($this->schema && $this->schema->getProperties()) {
+            foreach ($this->schema->getProperties() as $property) {
+                if ($property->alias) {
+                    $fields[] = $property->alias;
+                } else {
+                    $fields[] = $property->getName();
+                }
+            }
+        }
+
+        return array_unique($fields);
     }
 }
