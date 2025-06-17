@@ -19,14 +19,8 @@ abstract class Lookup
     /**
      * Retrieve all picklist values for the lookup.
      */
-    public static function all(?Salesforce $client = null): array
+    public static function fetch(Salesforce $client): array
     {
-        $client = $client ?: (function_exists('app') ? app(Salesforce::class) : null);
-
-        if (! $client) {
-            throw new \InvalidArgumentException('Salesforce client must be provided.');
-        }
-
         return $client->picklistValues(static::object(), static::field());
     }
 }

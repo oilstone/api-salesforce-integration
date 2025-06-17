@@ -8,6 +8,8 @@ use Oilstone\ApiSalesforceIntegration\Lookups\Lookup;
 
 abstract class CachedLookup extends Lookup
 {
+    protected static int $ttl = 3600; // Default TTL of 1 hour
+
     /**
      * Cache key for the lookup values.
      */
@@ -21,11 +23,17 @@ abstract class CachedLookup extends Lookup
      */
     protected static function ttl(): int
     {
-        return 3600;
+        return static::$ttl;
     }
 
-    public static function all(?Salesforce $client = null): array
+    public static function all(): array
     {
-        return Cache::remember(static::cacheKey(), static::ttl(), fn () => parent::all($client));
+        $client = app(Salesforce::class);
+
+        if (! $client) {
+            throw new \InvalidArgumentException('Salesforce client must be provided.');
+        }
+
+        return Cache::remember(static::cacheKey(), static::ttl(), fn () => static::fetch($client));
     }
 }
