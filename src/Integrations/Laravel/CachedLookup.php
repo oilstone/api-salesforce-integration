@@ -15,7 +15,7 @@ abstract class CachedLookup extends Lookup
      */
     protected static function cacheKey(): string
     {
-        return 'salesforce.lookup.'.static::object().'.'.static::field();
+        return 'salesforce.lookup.'.static::object().'.'.static::recordTypeId().'.'.static::field();
     }
 
     /**

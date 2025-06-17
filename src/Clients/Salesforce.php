@@ -49,16 +49,19 @@ class Salesforce
         return json_decode((string) $response->getBody(), true);
     }
 
-    public function picklistValues(string $object, string $field): array
+    public function picklistValues(string $object, string $recordTypeId, string $field): array
     {
-        $describe = $this->describe($object);
+        $response = $this->httpClient->request('GET',
+            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/ui-api/object-info/'.trim($object, '/').'/picklist-values/'.trim($recordTypeId, '/').'/'.trim($field, '/'), [
+                'headers' => [
+                    'Authorization' => 'Bearer '.$this->accessToken,
+                    'Accept' => 'application/json',
+                ],
+            ]
+        );
 
-        foreach ($describe['fields'] ?? [] as $fieldInfo) {
-            if (($fieldInfo['name'] ?? null) === $field && isset($fieldInfo['picklistValues'])) {
-                return array_values(array_map(fn ($v) => $v['value'], $fieldInfo['picklistValues']));
-            }
-        }
+        $data = json_decode((string) $response->getBody(), true);
 
-        return [];
+        return array_values(array_map(fn ($v) => $v['value'], $data['values'] ?? []));
     }
 }

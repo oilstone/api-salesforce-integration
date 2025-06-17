@@ -17,10 +17,15 @@ abstract class Lookup
     abstract public static function field(): string;
 
     /**
+     * The record type id for the Salesforce object.
+     */
+    abstract public static function recordTypeId(): string;
+
+    /**
      * Retrieve all picklist values for the lookup.
      */
     public static function fetch(Salesforce $client): array
     {
-        return $client->picklistValues(static::object(), static::field());
+        return $client->picklistValues(static::object(), static::recordTypeId(), static::field());
     }
 }
