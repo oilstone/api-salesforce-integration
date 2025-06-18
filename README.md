@@ -27,11 +27,19 @@ return [
     'instance_version' => env('SALESFORCE_INSTANCE_VERSION', 'v52.0'),
     'client_id' => env('SALESFORCE_CLIENT_ID'),
     'client_secret' => env('SALESFORCE_CLIENT_SECRET'),
+    'debug' => env('SALESFORCE_DEBUG', false),
 ];
 ```
 
 The service provider retrieves an access token using these values and caches it
 for subsequent requests using Laravel's cache facade.
+
+When `SALESFORCE_DEBUG` is enabled the package will log each API request and
+its corresponding response using Laravel's logger.
+
+If a request results in an error response a `SalesforceException` will be
+thrown containing the decoded error details which can be retrieved using
+`getErrors()`.
 
 ## Repository constraints
 

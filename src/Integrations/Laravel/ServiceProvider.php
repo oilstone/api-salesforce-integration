@@ -4,6 +4,7 @@ namespace Oilstone\ApiSalesforceIntegration\Integrations\Laravel;
 
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 
@@ -32,7 +33,13 @@ class ServiceProvider extends BaseServiceProvider
                 return $data['access_token'] ?? null;
             });
 
-            return new Salesforce($client, $config['instance_url'], $token, $config['instance_version']);
+            $logger = null;
+
+            if (! empty($config['debug'])) {
+                $logger = Log::channel();
+            }
+
+            return new Salesforce($client, $config['instance_url'], $token, $config['instance_version'], $logger);
         });
     }
 
