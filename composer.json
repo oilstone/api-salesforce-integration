@@ -6,7 +6,8 @@
         "garethhudson07/aggregate": "^1.2",
         "garethhudson07/api": "^9.5",
         "nesbot/carbon": "^3.10",
-        "guzzlehttp/guzzle": "^7.9"
+        "guzzlehttp/guzzle": "^7.9",
+        "psr/log": "^3.0"
     },
     "require-dev": {
         "laravel/framework": "^11.0",
