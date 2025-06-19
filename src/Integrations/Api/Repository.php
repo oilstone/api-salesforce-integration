@@ -19,6 +19,8 @@ class Repository implements RepositoryInterface
 {
     protected ?Schema $schema = null;
 
+    protected array $defaultConstraints = [];
+
     public function __construct(
         protected ?string $object = null,
         protected ?Sentinel $sentinel = null
@@ -31,26 +33,11 @@ class Repository implements RepositoryInterface
         return $this;
     }
 
-    protected function newQuery(?string $object = null): Query
+    public function setDefaultConstraints(array $constraints): static
     {
-        return (new BaseRepository($object ?? $this->object))->newQuery();
-    }
+        $this->defaultConstraints = $constraints;
 
-    protected function getDefaultFields(): array
-    {
-        $fields = [];
-
-        if ($this->schema && $this->schema->getPrimary()) {
-            $fields[] = $this->schema->getPrimary()->alias ?: $this->schema->getPrimary()->getName();
-        }
-
-        if ($this->schema && $this->schema->getProperties()) {
-            foreach ($this->schema->getProperties() as $property) {
-                $fields[] = $property->alias ?: $property->getName();
-            }
-        }
-
-        return array_unique($fields);
+        return $this;
     }
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
@@ -95,5 +82,27 @@ class Repository implements RepositoryInterface
     public function delete(Pipe $pipe): ResultRecordInterface
     {
         throw new MethodNotAllowedException;
+    }
+
+    protected function newQuery(?string $object = null): Query
+    {
+        return (new BaseRepository($object ?? $this->object, $this->defaultConstraints))->newQuery();
+    }
+
+    protected function getDefaultFields(): array
+    {
+        $fields = [];
+
+        if ($this->schema && $this->schema->getPrimary()) {
+            $fields[] = $this->schema->getPrimary()->alias ?: $this->schema->getPrimary()->getName();
+        }
+
+        if ($this->schema && $this->schema->getProperties()) {
+            foreach ($this->schema->getProperties() as $property) {
+                $fields[] = $property->alias ?: $property->getName();
+            }
+        }
+
+        return array_unique($fields);
     }
 }
