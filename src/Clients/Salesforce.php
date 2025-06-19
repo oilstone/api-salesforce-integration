@@ -101,4 +101,44 @@ class Salesforce
             $data['values'] ?? []
         ));
     }
+
+    public function create(string $object, array $payload): array
+    {
+        $url = $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/');
+
+        return $this->request('POST', $url, [
+            'headers' => [
+                'Authorization' => 'Bearer '.$this->accessToken,
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ],
+            'json' => $payload,
+        ]);
+    }
+
+    public function update(string $object, string $id, array $payload): array
+    {
+        $url = $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/'.trim($id, '/');
+
+        return $this->request('PATCH', $url, [
+            'headers' => [
+                'Authorization' => 'Bearer '.$this->accessToken,
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ],
+            'json' => $payload,
+        ]);
+    }
+
+    public function delete(string $object, string $id): array
+    {
+        $url = $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/'.trim($id, '/');
+
+        return $this->request('DELETE', $url, [
+            'headers' => [
+                'Authorization' => 'Bearer '.$this->accessToken,
+                'Accept' => 'application/json',
+            ],
+        ]);
+    }
 }

@@ -67,3 +67,33 @@ class University extends Resource
     }
 }
 ```
+
+## Repository queries
+
+The `find`, `first` and `get` methods accept an optional array of options that
+can be used to build the underlying query. Available options are:
+
+- `conditions` – an array of where constraints (arrays or callbacks)
+- `select` – fields to return
+- `includes` – relationships to include
+- `order` – sorting definitions
+- `limit` and `offset` – for pagination
+
+```php
+$repo->get([
+    'select' => ['Id', 'Name'],
+    'includes' => ['Contacts'],
+    'conditions' => [['Type', 'Customer']],
+    'order' => [['Name', 'ASC']],
+    'limit' => 10,
+    'offset' => 20,
+]);
+```
+
+The repository also supports simple write operations:
+
+```php
+$record = $repo->create(['Name' => 'New Account']);
+$repo->update($record['id'], ['Name' => 'Updated']);
+$repo->delete($record['id']);
+```

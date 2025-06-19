@@ -39,19 +39,74 @@ class Repository
         return $query;
     }
 
-    public function find(string $id): ?Record
+    protected function applyOptions(Query $query, array $options): Query
     {
-        return $this->newQuery()->where('Id', $id)->first();
+        foreach ($options['conditions'] ?? [] as $condition) {
+            if (is_callable($condition)) {
+                $condition($query);
+                continue;
+            }
+
+            if (is_array($condition)) {
+                $query->where(...$condition);
+            }
+        }
+
+        if (isset($options['select'])) {
+            $query->select($options['select']);
+        }
+
+        foreach ($options['includes'] ?? ($options['with'] ?? []) as $include) {
+            $query->with($include);
+        }
+
+        foreach ($options['order'] ?? ($options['sort'] ?? []) as $order) {
+            if (is_array($order)) {
+                $query->orderBy($order[0], $order[1] ?? 'ASC');
+            } else {
+                $query->orderBy($order);
+            }
+        }
+
+        if (isset($options['limit'])) {
+            $query->limit($options['limit']);
+        }
+
+        if (isset($options['offset'])) {
+            $query->offset($options['offset']);
+        }
+
+        return $query;
     }
 
-    public function first(): ?Record
+    public function find(string $id, array $options = []): ?Record
     {
-        return $this->newQuery()->first();
+        return $this->applyOptions($this->newQuery()->where('Id', $id), $options)->first();
     }
 
-    public function get(): Collection
+    public function first(array $options = []): ?Record
     {
-        return $this->newQuery()->get();
+        return $this->applyOptions($this->newQuery(), $options)->first();
+    }
+
+    public function get(array $options = []): Collection
+    {
+        return $this->applyOptions($this->newQuery(), $options)->get();
+    }
+
+    public function create(array $attributes): array
+    {
+        return $this->getClient()->create($this->object, $attributes);
+    }
+
+    public function update(string $id, array $attributes): array
+    {
+        return $this->getClient()->update($this->object, $id, $attributes);
+    }
+
+    public function delete(string $id): array
+    {
+        return $this->getClient()->delete($this->object, $id);
     }
 
     protected function getClient(): Salesforce
