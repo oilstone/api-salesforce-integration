@@ -15,21 +15,8 @@ class Query
 
     protected array $selects = ['Id'];
 
-    /**
-     * @var array<string, mixed>
-     */
     protected array $relationships = [];
 
-    /**
-     * Stored query constraints.
-     *
-     * Each condition item may contain:
-     *  - boolean: and|or
-     *  - type: basic|nested|in
-     *  - field: string
-     *  - operator: string
-     *  - value|values|conditions
-     */
     protected array $conditions = [];
 
     protected array $orders = [];
@@ -192,13 +179,6 @@ class Query
         $result = $this->limit(1)->get();
 
         return $result->count() ? $result[0] : null;
-    }
-
-    public static function resolveRelation(string $relation): ?string
-    {
-        // This method is as yet unsupported in this implementation and will likely be removed.
-
-        return null;
     }
 
     protected function toSoql(): string

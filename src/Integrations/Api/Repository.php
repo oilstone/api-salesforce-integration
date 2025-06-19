@@ -8,24 +8,21 @@ use Api\Repositories\Contracts\Resource as RepositoryInterface;
 use Api\Result\Contracts\Collection as ResultCollectionInterface;
 use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
-use Oilstone\ApiSalesforceIntegration\BaseRepository;
 use Oilstone\ApiSalesforceIntegration\Collection;
 use Oilstone\ApiSalesforceIntegration\Exceptions\MethodNotAllowedException;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
+use Oilstone\ApiSalesforceIntegration\Query;
+use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
 use Psr\Http\Message\ServerRequestInterface;
 
-class Repository extends BaseRepository implements RepositoryInterface
+class Repository implements RepositoryInterface
 {
     protected ?Schema $schema = null;
 
-    public function __construct(?string $object = null, ?Sentinel $sentinel = null)
-    {
-        if (property_exists($this, 'sentinel')) {
-            $this->sentinel = $sentinel;
-        }
-
-        parent::__construct($object);
-    }
+    public function __construct(
+        protected ?string $object = null,
+        protected ?Sentinel $sentinel = null
+    ) {}
 
     public function setSchema(Schema $schema): static
     {
@@ -34,9 +31,9 @@ class Repository extends BaseRepository implements RepositoryInterface
         return $this;
     }
 
-    protected function newQuery(?ServerRequestInterface $request = null, ?string $object = null): \Oilstone\ApiSalesforceIntegration\Query
+    protected function newQuery(?string $object = null): Query
     {
-        return parent::newQuery($object);
+        return (new BaseRepository($object ?? $this->object))->newQuery();
     }
 
     protected function getDefaultFields(): array
@@ -69,7 +66,7 @@ class Repository extends BaseRepository implements RepositoryInterface
     {
         return Collection::make(
             (new QueryResolver(
-                $this->newQuery($request, $request->getQueryParams()['object'] ?? null),
+                $this->newQuery($request->getQueryParams()['object'] ?? null),
                 $pipe,
                 $this->getDefaultFields(),
             ))->collection($request)->all()
@@ -79,7 +76,7 @@ class Repository extends BaseRepository implements RepositoryInterface
     public function getRecord(Pipe $pipe, ServerRequestInterface $request): ?ResultRecordInterface
     {
         return (new QueryResolver(
-            $this->newQuery($request, $request->getQueryParams()['object'] ?? null),
+            $this->newQuery($request->getQueryParams()['object'] ?? null),
             $pipe,
             $this->getDefaultFields(),
         ))->record($request);

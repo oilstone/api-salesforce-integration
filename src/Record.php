@@ -27,13 +27,17 @@ class Record extends Map implements ApiRecordContract
 
     public function getRelations(): array
     {
-        $relations = [];
+        return array_filter(array_map(function (mixed $property) {
+            if (! is_array($property)) {
+                return null;
+            }
 
-        foreach ($this->extractRelations() as $relation => $data) {
-            $relations[Query::resolveRelation($relation) ?? $relation] = $data;
-        }
+            if (isset($property[0])) {
+                return Collection::make($property);
+            }
 
-        return $relations;
+            return (new static)->fill($property);
+        }, $this->all()));
     }
 
     public function getAttributes(): array
@@ -56,20 +60,5 @@ class Record extends Map implements ApiRecordContract
     public function getAttribute(string $key): mixed
     {
         return $this->get($key);
-    }
-
-    protected function extractRelations(): array
-    {
-        return array_filter(array_map(function (mixed $property) {
-            if (! is_array($property)) {
-                return null;
-            }
-
-            if (isset($property[0])) {
-                return Collection::make($property);
-            }
-
-            return (new static)->fill($property);
-        }, $this->all()));
     }
 }
