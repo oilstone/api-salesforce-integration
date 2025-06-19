@@ -1,16 +1,33 @@
-# api-salesforce-integration
-A Salesforce integration package for garethhudson07/api
+# API Salesforce Integration
 
-## Laravel Integration
+A lightweight integration for interacting with Salesforce from PHP. The package supplies a stand‑alone client and query builder while also providing adapters for the [garethhudson07/api](https://github.com/garethhudson07/api) framework.
 
-The package ships with an optional Laravel service provider that handles
-authentication and caching of access tokens. Register the provider and publish
-the configuration file:
+## Features
+
+- **Salesforce HTTP client** built on Guzzle with convenience helpers for common endpoints.
+- **Fluent SOQL query builder** supporting nested conditions, `IN` clauses, ordering, limits and relationship includes.
+- **Repository layer** exposing `find`, `first`, `get`, `create`, `update` and `delete` methods for Salesforce objects.
+- **Integration with garethhudson07/api** through repository and query bridge classes and a data transformer so that resources defined in that package can query Salesforce seamlessly.
+- **Laravel support** including a service provider for obtaining and caching OAuth tokens and optional request logging.
+- **Lookup utilities** for retrieving and caching pick list values.
+- **Adapters for api-resource-loader** allowing resources to be loaded from configuration files.
+
+Although the package was designed to act as a bridge for `garethhudson07/api`, the client, query builder and repository classes can be used independently in any PHP project.
+
+## Installation
+
+```bash
+composer require oilstone/api-salesforce-integration
+```
+
+### Optional Laravel setup
+
+If your project uses Laravel you can register the service provider and publish the configuration file:
 
 ```php
 // config/app.php
 'providers' => [
-    Oilstone\ApiSalesforceIntegration\Integrations\Laravel\ServiceProvider::class,
+    \Oilstone\ApiSalesforceIntegration\Integrations\Laravel\ServiceProvider::class,
 ],
 ```
 
@@ -18,82 +35,60 @@ the configuration file:
 php artisan vendor:publish --tag=config --provider="Oilstone\\ApiSalesforceIntegration\\Integrations\\Laravel\\ServiceProvider"
 ```
 
-The `config/salesforce.php` file allows you to specify your
-Salesforce instance details and credentials:
+Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger.
+
+## Basic usage
+
+### Stand‑alone
 
 ```php
-return [
-    'instance_url' => env('SALESFORCE_INSTANCE_URL'),
-    'instance_version' => env('SALESFORCE_INSTANCE_VERSION', 'v52.0'),
-    'client_id' => env('SALESFORCE_CLIENT_ID'),
-    'client_secret' => env('SALESFORCE_CLIENT_SECRET'),
-    'debug' => env('SALESFORCE_DEBUG', false),
-];
+use GuzzleHttp\Client;
+use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
+use Oilstone\ApiSalesforceIntegration\Repository;
+
+$http = new Client();
+$salesforce = new Salesforce($http, $instanceUrl, $accessToken);
+$accounts = (new Repository('Account'))
+    ->setDefaultConstraints([['Type', 'Customer']])
+    ->newQuery()
+    ->where('Name', 'like', 'Acme%')
+    ->get();
 ```
 
-The service provider retrieves an access token using these values and caches it
-for subsequent requests using Laravel's cache facade.
+### With garethhudson07/api
 
-When `SALESFORCE_DEBUG` is enabled the package will log each API request and
-its corresponding response using Laravel's logger.
-
-If a request results in an error response a `SalesforceException` will be
-thrown containing the decoded error details which can be retrieved using
-`getErrors()`.
-
-## Repository constraints
-
-When creating a repository you may specify default constraints that are applied
-to every query. Constraints are provided as callbacks that receive the query
-builder instance:
+Create a resource repository that extends the provided API adapter and let the framework resolve queries against Salesforce:
 
 ```php
-$resource->setObject('Account')
-    ->addConstraint(fn ($query) => $query->where('Type', 'Customer'))
-    ->addConstraint(fn ($query) => $query->where('RecordTypeId', '0123...'));
-```
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository as ApiRepository;
 
-When extending the provided `Resource` class you may override the
-`constraints` method to declare default repository constraints:
-
-```php
-class University extends Resource
+class AccountRepository extends ApiRepository
 {
     protected ?string $object = 'Account';
-
-    protected function constraints(): array
-    {
-        return [fn ($query) => $query->where('Type', 'University')];
-    }
 }
 ```
 
-## Repository queries
+The package's query resolver and transformer bridge the API pipeline to Salesforce so existing endpoints defined in `garethhudson07/api` continue to work with Salesforce data.
 
-The `find`, `first` and `get` methods accept an optional array of options that
-can be used to build the underlying query. Available options are:
+## Lookups
 
-- `conditions` – an array of where constraints (arrays or callbacks)
-- `select` – fields to return
-- `includes` – relationships to include
-- `order` – sorting definitions
-- `limit` and `offset` – for pagination
+Extend `Lookup` or `CachedLookup` to pull picklist values from Salesforce:
 
 ```php
-$repo->get([
-    'select' => ['Id', 'Name'],
-    'includes' => ['Contacts'],
-    'conditions' => [['Type', 'Customer']],
-    'order' => [['Name', 'ASC']],
-    'limit' => 10,
-    'offset' => 20,
-]);
+class IndustryLookup extends CachedLookup
+{
+    public static function object(): string { return 'Account'; }
+    public static function field(): string { return 'Industry'; }
+    public static function recordTypeId(): string { return '0123...'; }
+}
+
+$industries = IndustryLookup::all();
 ```
 
-The repository also supports simple write operations:
+## Exceptions
 
-```php
-$record = $repo->create(['Name' => 'New Account']);
-$repo->update($record['id'], ['Name' => 'Updated']);
-$repo->delete($record['id']);
-```
+`SalesforceException` is thrown for non‑successful responses and provides access to the underlying error details via `getErrors()`.
+
+## License
+
+This package is released under the MIT license.
