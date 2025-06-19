@@ -81,16 +81,22 @@ class Repository
 
     public function find(string $id, array $options = []): ?Record
     {
+        $options['select'] = $options['select'] ?? ['FIELDS(ALL)'];
+
         return $this->applyOptions($this->newQuery()->where('Id', $id), $options)->first();
     }
 
     public function first(array $options = []): ?Record
     {
+        $options['select'] = $options['select'] ?? ['FIELDS(ALL)'];
+
         return $this->applyOptions($this->newQuery(), $options)->first();
     }
 
     public function get(array $options = []): Collection
     {
+        $options['select'] = $options['select'] ?? ['Id'];
+
         return $this->applyOptions($this->newQuery(), $options)->get();
     }
 
