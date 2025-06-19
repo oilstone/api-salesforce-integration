@@ -1,6 +1,6 @@
 <?php
 
-namespace Oilstone\ApiSalesforceIntegration;
+namespace Oilstone\ApiSalesforceIntegration\Integrations\Api;
 
 use Api\Guards\Contracts\Sentinel;
 use Api\Pipeline\Pipes\Pipe;
@@ -8,21 +8,15 @@ use Api\Repositories\Contracts\Resource as RepositoryInterface;
 use Api\Result\Contracts\Collection as ResultCollectionInterface;
 use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
-use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
+use Oilstone\ApiSalesforceIntegration\BaseRepository;
+use Oilstone\ApiSalesforceIntegration\Collection;
 use Oilstone\ApiSalesforceIntegration\Exceptions\MethodNotAllowedException;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Psr\Http\Message\ServerRequestInterface;
 
-class Repository implements RepositoryInterface
+class Repository extends BaseRepository implements RepositoryInterface
 {
-    protected ?string $object;
-
     protected ?Schema $schema = null;
-
-    /**
-     * @var array<int, callable>
-     */
-    protected array $defaultConstraints = [];
 
     public function __construct(?string $object = null, ?Sentinel $sentinel = null)
     {
@@ -30,7 +24,7 @@ class Repository implements RepositoryInterface
             $this->sentinel = $sentinel;
         }
 
-        $this->object = $object;
+        parent::__construct($object);
     }
 
     public function setSchema(Schema $schema): static
@@ -40,22 +34,26 @@ class Repository implements RepositoryInterface
         return $this;
     }
 
-    public function setDefaultConstraints(array $constraints): static
+    protected function newQuery(?ServerRequestInterface $request = null, ?string $object = null): \Oilstone\ApiSalesforceIntegration\Query
     {
-        $this->defaultConstraints = [];
-
-        foreach ($constraints as $constraint) {
-            $this->addDefaultConstraint($constraint);
-        }
-
-        return $this;
+        return parent::newQuery($object);
     }
 
-    public function addDefaultConstraint(callable $constraint): static
+    protected function getDefaultFields(): array
     {
-        $this->defaultConstraints[] = $constraint;
+        $fields = [];
 
-        return $this;
+        if ($this->schema && $this->schema->getPrimary()) {
+            $fields[] = $this->schema->getPrimary()->alias ?: $this->schema->getPrimary()->getName();
+        }
+
+        if ($this->schema && $this->schema->getProperties()) {
+            foreach ($this->schema->getProperties() as $property) {
+                $fields[] = $property->alias ?: $property->getName();
+            }
+        }
+
+        return array_unique($fields);
     }
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
@@ -100,42 +98,5 @@ class Repository implements RepositoryInterface
     public function delete(Pipe $pipe): ResultRecordInterface
     {
         throw new MethodNotAllowedException;
-    }
-
-    protected function getClient(?ServerRequestInterface $request = null): Salesforce
-    {
-        return app(Salesforce::class);
-    }
-
-    protected function newQuery(?ServerRequestInterface $request = null, ?string $object = null): Query
-    {
-        $query = new Query($object ?? $this->object, $this->getClient($request));
-
-        foreach ($this->defaultConstraints as $constraint) {
-            $constraint($query);
-        }
-
-        return $query;
-    }
-
-    protected function getDefaultFields(): array
-    {
-        $fields = [];
-
-        if ($this->schema && $this->schema->getPrimary()) {
-            $fields[] = $this->schema->getPrimary()->alias ?: $this->schema->getPrimary()->getName();
-        }
-
-        if ($this->schema && $this->schema->getProperties()) {
-            foreach ($this->schema->getProperties() as $property) {
-                if ($property->alias) {
-                    $fields[] = $property->alias;
-                } else {
-                    $fields[] = $property->getName();
-                }
-            }
-        }
-
-        return array_unique($fields);
     }
 }

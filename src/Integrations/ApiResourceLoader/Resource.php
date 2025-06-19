@@ -7,7 +7,7 @@ use Api\Repositories\Contracts\Resource as RepositoryContract;
 use Api\Schema\Schema as BaseSchema;
 use Api\Transformers\Contracts\Transformer as TransformerContract;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Transformer;
-use Oilstone\ApiSalesforceIntegration\Repository;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository;
 use Oilstone\ApiResourceLoader\Resources\Resource as BaseResource;
 
 class Resource extends BaseResource
