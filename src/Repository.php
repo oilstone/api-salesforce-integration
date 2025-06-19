@@ -7,7 +7,7 @@ use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 class Repository
 {
     public function __construct(
-        protected ?string $object = null,
+        protected string $object,
         protected array $defaultConstraints = [],
     ) {}
 

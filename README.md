@@ -64,7 +64,7 @@ use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository as ApiReposito
 
 class AccountRepository extends ApiRepository
 {
-    protected ?string $object = 'Account';
+    protected string $object = 'Account';
 }
 ```
 

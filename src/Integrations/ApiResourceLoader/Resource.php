@@ -12,26 +12,15 @@ use Oilstone\ApiResourceLoader\Resources\Resource as BaseResource;
 
 class Resource extends BaseResource
 {
-    protected ?string $object;
+    protected string $object;
 
-    /**
-     * @var array<int, callable>
-     */
     protected array $constraints = [];
-
-    /**
-     * @return array<int, callable>
-     */
-    protected function constraints(): array
-    {
-        return [];
-    }
 
     public function repository(?Sentinel $sentinel = null): ?RepositoryContract
     {
         return (new Repository($this->object, $sentinel))
             ->setSchema($this->makeSchema())
-            ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints));
+            ->setDefaultConstraints(array_merge($this->getContraints(), $this->constraints));
     }
 
     public function transformer(BaseSchema $schema): ?TransformerContract
@@ -44,27 +33,21 @@ class Resource extends BaseResource
         return $this->object;
     }
 
-    public function setObject(?string $object): static
+    public function setObject(string $object): static
     {
         $this->object = $object;
 
         return $this;
     }
 
-    public function setConstraints(array $constraints): static
+    public function getContraints(): array
     {
-        $this->constraints = [];
-
-        foreach ($constraints as $constraint) {
-            $this->addConstraint($constraint);
-        }
-
-        return $this;
+        return $this->constraints;
     }
 
-    public function addConstraint(callable $constraint): static
+    public function setConstraints(array $constraints): static
     {
-        $this->constraints[] = $constraint;
+        $this->constraints = $constraints;
 
         return $this;
     }

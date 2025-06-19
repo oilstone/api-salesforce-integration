@@ -9,7 +9,7 @@ use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 
 class Query
 {
-    protected ?string $object;
+    protected string $object;
 
     protected Salesforce $client;
 
@@ -25,13 +25,13 @@ class Query
 
     protected ?int $offset = null;
 
-    public function __construct(?string $object, Salesforce $client)
+    public function __construct(string $object, Salesforce $client)
     {
         $this->object = $object;
         $this->client = $client;
     }
 
-    public static function make(?string $object, Salesforce $client): static
+    public static function make(string $object, Salesforce $client): static
     {
         return new static($object, $client);
     }
@@ -41,7 +41,7 @@ class Query
         return $this->object;
     }
 
-    public function setObject(?string $object): static
+    public function setObject(string $object): static
     {
         $this->object = $object;
 
