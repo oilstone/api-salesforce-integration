@@ -20,7 +20,7 @@ class Transformer implements Contract
 
     public function reverse(array $attributes): array
     {
-        return $attributes;
+        return $this->reverseSchema($this->schema, $attributes);
     }
 
     public function transformMetaData(Record $record): array
@@ -82,5 +82,65 @@ class Transformer implements Contract
         }
 
         return $transformed;
+    }
+
+    protected function reverseSchema(Schema $schema, array $attributes): array
+    {
+        $reversed = [];
+
+        foreach ($schema->getProperties() as $property) {
+            if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
+                $value = $attributes[$property->getName()] ?? [];
+
+                if (is_array($value)) {
+                    $reversed = array_replace_recursive($reversed, $this->reverseSchema($property->getAccepts(), $value));
+                }
+
+                continue;
+            }
+
+            if (! array_key_exists($property->getName(), $attributes)) {
+                continue;
+            }
+
+            $key = $property->alias ?: $property->getName();
+            $value = $attributes[$property->getName()];
+
+            if ($value) {
+                switch ($property->getType()) {
+                    case 'date':
+                        $value = Carbon::parse($value)->toDateString();
+                        break;
+
+                    case 'datetime':
+                    case 'timestamp':
+                        $value = Carbon::parse($value)->toDateTimeString();
+                        break;
+
+                    case 'collection':
+                        $value = array_values(array_filter(array_map(function ($item) use ($property) {
+                            return $item ? $this->reverseSchema($property->getAccepts(), $item) : null;
+                        }, $value)));
+                        break;
+                }
+            }
+
+            $path = explode('.', $key);
+            $current = &$reversed;
+
+            while (count($path) > 1) {
+                $segment = array_shift($path);
+
+                if (! isset($current[$segment]) || ! is_array($current[$segment])) {
+                    $current[$segment] = [];
+                }
+
+                $current = &$current[$segment];
+            }
+
+            $current[$path[0]] = $value;
+        }
+
+        return $reversed;
     }
 }
