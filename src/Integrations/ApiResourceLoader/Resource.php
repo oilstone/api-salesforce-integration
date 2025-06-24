@@ -3,9 +3,6 @@
 namespace Oilstone\ApiSalesforceIntegration\Integrations\ApiResourceLoader;
 
 use Api\Guards\OAuth2\Sentinel;
-use Api\Repositories\Contracts\Resource as RepositoryContract;
-use Api\Schema\Schema as BaseSchema;
-use Api\Transformers\Contracts\Transformer as TransformerContract;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Transformer;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository;
 use Oilstone\ApiResourceLoader\Resources\Resource as BaseResource;
@@ -16,19 +13,20 @@ class Resource extends BaseResource
 
     protected array $constraints = [];
 
-    public function repository(?Sentinel $sentinel = null): ?RepositoryContract
+    protected ?string $transformer = Transformer::class;
+
+    protected ?string $repository = Repository::class;
+
+    public function makeRepository(?Sentinel $sentinel = null, ...$params): ?Repository
     {
-        return (new Repository($this->object, $sentinel))
+        $repositoryClass = $this->repository;
+
+        return (new $repositoryClass($this->object, $sentinel, ...$params))
             ->setSchema($this->makeSchema())
-            ->setDefaultConstraints(array_merge($this->getContraints(), $this->constraints));
+            ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints));
     }
 
-    public function transformer(BaseSchema $schema): ?TransformerContract
-    {
-        return new Transformer($schema);
-    }
-
-    public function getObject(): string
+    public function object(): string
     {
         return $this->object;
     }
@@ -40,7 +38,7 @@ class Resource extends BaseResource
         return $this;
     }
 
-    public function getContraints(): array
+    public function constraints(): array
     {
         return $this->constraints;
     }

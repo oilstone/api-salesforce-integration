@@ -22,7 +22,7 @@ class Repository implements RepositoryInterface
     protected array $defaultConstraints = [];
 
     public function __construct(
-        protected string $object = null,
+        protected string $object,
         protected ?Sentinel $sentinel = null
     ) {}
 
