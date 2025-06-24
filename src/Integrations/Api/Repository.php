@@ -8,6 +8,7 @@ use Api\Repositories\Contracts\Resource as RepositoryInterface;
 use Api\Result\Contracts\Collection as ResultCollectionInterface;
 use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
+use Api\Transformers\Contracts\Transformer;
 use Oilstone\ApiSalesforceIntegration\Collection;
 use Oilstone\ApiSalesforceIntegration\Exceptions\MethodNotAllowedException;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
@@ -19,16 +20,39 @@ class Repository implements RepositoryInterface
 {
     protected ?Schema $schema = null;
 
+    protected ?Transformer $transformer = null;
+
     protected array $defaultConstraints = [];
 
     public function __construct(
         protected string $object,
-        protected ?Sentinel $sentinel = null
-    ) {}
+        ?Sentinel $sentinel = null
+    ) {
+        if (property_exists($this, 'sentinel') && $sentinel) {
+            $this->sentinel = $sentinel;
+        }
+    }
+
+    public function getSchema(): ?Schema
+    {
+        return $this->schema;
+    }
 
     public function setSchema(Schema $schema): static
     {
         $this->schema = $schema;
+
+        return $this;
+    }
+
+    public function getTransformer(): ?Transformer
+    {
+        return $this->transformer;
+    }
+
+    public function setTransformer(Transformer $transformer): static
+    {
+        $this->transformer = $transformer;
 
         return $this;
     }
