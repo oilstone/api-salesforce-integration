@@ -19,13 +19,25 @@ class Resource extends BaseResource
 
     public function makeRepository(?Sentinel $sentinel = null, ...$params): ?Repository
     {
+        if (isset($this->cached['repository'])) {
+            return $this->cached['repository'];
+        }
+
         $repositoryClass = $this->repository;
         $schema = $this->makeSchema();
 
-        return (new $repositoryClass($this->object, $sentinel, ...$params))
+        $repository = (new $repositoryClass($this->object))
             ->setSchema($schema)
             ->setTransformer($this->makeTransformer($schema))
             ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints));
+
+        if (method_exists($repository, 'setSentinel')) {
+            $repository->setSentinel($sentinel);
+        }
+
+        $this->cached['repository'] = $repository;
+
+        return $repository;
     }
 
     public function object(): string

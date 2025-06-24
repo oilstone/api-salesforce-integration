@@ -2,7 +2,6 @@
 
 namespace Oilstone\ApiSalesforceIntegration\Integrations\Api;
 
-use Api\Guards\Contracts\Sentinel;
 use Api\Pipeline\Pipes\Pipe;
 use Api\Repositories\Contracts\Resource as RepositoryInterface;
 use Api\Result\Contracts\Collection as ResultCollectionInterface;
@@ -26,12 +25,7 @@ class Repository implements RepositoryInterface
 
     public function __construct(
         protected string $object,
-        ?Sentinel $sentinel = null
-    ) {
-        if (property_exists($this, 'sentinel') && $sentinel) {
-            $this->sentinel = $sentinel;
-        }
-    }
+    ) {}
 
     public function getSchema(): ?Schema
     {
