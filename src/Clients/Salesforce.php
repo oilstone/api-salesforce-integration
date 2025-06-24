@@ -54,7 +54,7 @@ class Salesforce
         $body = (string) $response->getBody();
         $data = json_decode($body, true);
 
-        $this->log($method, $url, $options['query'] ?? [], $data, $response->getStatusCode());
+        $this->log($method, $url, $options['query'] ?? [], $data ?? [], $response->getStatusCode());
 
         if ($response->getStatusCode() >= 400) {
             throw SalesforceException::fromResponse($response);
