@@ -17,6 +17,8 @@ class Query
 
     protected array $relationships = [];
 
+    protected static array $descriptions = [];
+
     protected array $conditions = [];
 
     protected array $orders = [];
@@ -50,9 +52,63 @@ class Query
 
     public function with(string $relation): static
     {
-        $this->relationships[] = $relation;
+        $relation = trim($relation);
+
+        if (str_contains(strtoupper($relation), 'SELECT')) {
+            $this->relationships[] = $relation;
+
+            return $this;
+        }
+
+        $compiled = $this->compileInclude($relation);
+        $this->relationships[] = $compiled;
 
         return $this;
+    }
+
+    protected function compileInclude(string $relation): string
+    {
+        $parts = explode('.', $relation, 2);
+
+        $child = $parts[0];
+        $childRelationship = $this->childRelationshipName($child) ?? $child;
+
+        if (count($parts) === 1) {
+            return sprintf('(SELECT FIELDS(ALL) FROM %s)', $childRelationship);
+        }
+
+        $field = $parts[1];
+        if (str_ends_with($field, '__c')) {
+            $field = substr($field, 0, -3).'__r';
+        }
+
+        return sprintf('(SELECT %s.FIELDS(ALL) FROM %s)', $field, $childRelationship);
+    }
+
+    protected function childRelationshipName(string $object): ?string
+    {
+        $describe = $this->describe($this->object);
+
+        foreach ($describe['childRelationships'] ?? [] as $relationship) {
+            if (strcasecmp($relationship['childSObject'] ?? '', $object) === 0) {
+                return $relationship['relationshipName'] ?? null;
+            }
+
+            if (strcasecmp($relationship['relationshipName'] ?? '', $object) === 0) {
+                return $relationship['relationshipName'];
+            }
+        }
+
+        return null;
+    }
+
+    protected function describe(string $object): array
+    {
+        if (! array_key_exists($object, self::$descriptions)) {
+            self::$descriptions[$object] = $this->client->describe($object);
+        }
+
+        return self::$descriptions[$object];
     }
 
     public function select(array|string $columns): static
