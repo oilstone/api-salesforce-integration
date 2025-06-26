@@ -13,6 +13,8 @@ class Resource extends BaseResource
 
     protected array $constraints = [];
 
+    protected array $includes = [];
+
     protected ?string $transformer = Transformer::class;
 
     protected ?string $repository = Repository::class;
@@ -29,7 +31,8 @@ class Resource extends BaseResource
         $repository = (new $repositoryClass($this->object))
             ->setSchema($schema)
             ->setTransformer($this->makeTransformer($schema))
-            ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints));
+            ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints))
+            ->setDefaultIncludes(array_merge($this->includes(), $this->includes));
 
         if (method_exists($repository, 'setSentinel')) {
             $repository->setSentinel($sentinel);
@@ -60,6 +63,18 @@ class Resource extends BaseResource
     public function setConstraints(array $constraints): static
     {
         $this->constraints = $constraints;
+
+        return $this;
+    }
+
+    public function includes(): array
+    {
+        return $this->includes;
+    }
+
+    public function setIncludes(array $includes): static
+    {
+        $this->includes = $includes;
 
         return $this;
     }
