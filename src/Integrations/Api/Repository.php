@@ -23,6 +23,8 @@ class Repository implements RepositoryInterface
 
     protected array $defaultConstraints = [];
 
+    protected array $defaultIncludes = [];
+
     public function __construct(
         protected string $object,
     ) {}
@@ -54,6 +56,13 @@ class Repository implements RepositoryInterface
     public function setDefaultConstraints(array $constraints): static
     {
         $this->defaultConstraints = $constraints;
+
+        return $this;
+    }
+
+    public function setDefaultIncludes(array $includes): static
+    {
+        $this->defaultIncludes = $includes;
 
         return $this;
     }
@@ -104,7 +113,7 @@ class Repository implements RepositoryInterface
 
     protected function newQuery(?string $object = null): Query
     {
-        return (new BaseRepository($object ?? $this->object, $this->defaultConstraints))->newQuery();
+        return (new BaseRepository($object ?? $this->object, $this->defaultConstraints, $this->defaultIncludes))->newQuery();
     }
 
     protected function getDefaultFields(): array

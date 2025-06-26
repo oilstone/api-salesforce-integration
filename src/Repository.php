@@ -9,11 +9,19 @@ class Repository
     public function __construct(
         protected string $object,
         protected array $defaultConstraints = [],
+        protected array $defaultIncludes = [],
     ) {}
 
     public function setDefaultConstraints(array $constraints): static
     {
         $this->defaultConstraints = $constraints;
+
+        return $this;
+    }
+
+    public function setDefaultIncludes(array $includes): static
+    {
+        $this->defaultIncludes = $includes;
 
         return $this;
     }
@@ -34,6 +42,10 @@ class Repository
             }
 
             $query->where($constraint);
+        }
+
+        foreach ($this->defaultIncludes as $include) {
+            $query->with($include);
         }
 
         return $query;
