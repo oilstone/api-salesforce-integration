@@ -68,17 +68,10 @@ class Query
 
     protected function compileInclude(string $relation): string
     {
+        $fields = '';
+
         if (str_contains($relation, ':')) {
-            [$child, $fields] = explode(':', $relation, 2);
-            $childRelationship = $this->childRelationshipName($child) ?? $child;
-
-            $fieldList = array_filter(array_map(function ($field) {
-                return trim($field);
-            }, explode(',', $fields)));
-
-            $fieldString = $fieldList ? implode(', ', $fieldList) : 'FIELDS(ALL)';
-
-            return sprintf('(SELECT %s FROM %s)', $fieldString, $childRelationship);
+            [$relation, $fields] = explode(':', $relation, 2);
         }
 
         $parts = explode('.', $relation, 2);
@@ -86,16 +79,29 @@ class Query
         $child = $parts[0];
         $childRelationship = $this->childRelationshipName($child) ?? $child;
 
-        if (count($parts) === 1) {
-            return sprintf('(SELECT FIELDS(ALL) FROM %s)', $childRelationship);
+        $prefix = null;
+        if (count($parts) > 1) {
+            $prefix = $parts[1];
+            if (str_ends_with($prefix, '__c')) {
+                $prefix = substr($prefix, 0, -3).'__r';
+            }
         }
 
-        $field = $parts[1];
-        if (str_ends_with($field, '__c')) {
-            $field = substr($field, 0, -3).'__r';
+        $fieldList = array_filter(array_map(function ($field) {
+            return trim($field);
+        }, explode(',', $fields)));
+
+        if (! $fieldList) {
+            $fieldList = ['Id', 'Name'];
         }
 
-        return sprintf('(SELECT %s.FIELDS(ALL) FROM %s)', $field, $childRelationship);
+        if ($prefix) {
+            $fieldList = array_map(fn ($field) => sprintf('%s.%s', $prefix, $field), $fieldList);
+        }
+
+        $fieldString = implode(', ', $fieldList);
+
+        return sprintf('(SELECT %s FROM %s)', $fieldString, $childRelationship);
     }
 
     protected function childRelationshipName(string $object): ?string
