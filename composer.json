@@ -3,6 +3,7 @@
     "description": "A Salesforce integration package for garethhudson07/api",
     "type": "library",
     "require": {
+        "php": "^8.1",
         "garethhudson07/aggregate": "^1.2",
         "garethhudson07/api": "^9.5",
         "nesbot/carbon": "^3.10",
