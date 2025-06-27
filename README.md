@@ -73,8 +73,8 @@ The package's query resolver and transformer bridge the API pipeline to Salesfor
 ### Including related records
 
 Use the `with` method when building a query to fetch related records. Pass the
-child object name (or relationship name) to include all fields for that
-relationship:
+child object name (or relationship name) to include the `Id` and `Name` fields
+for that relationship by default:
 
 ```php
 $account = (new Repository('Account'))
