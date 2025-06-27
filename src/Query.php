@@ -73,13 +73,7 @@ class Query
             $childRelationship = $this->childRelationshipName($child) ?? $child;
 
             $fieldList = array_filter(array_map(function ($field) {
-                $field = trim($field);
-
-                if (str_ends_with($field, '__c')) {
-                    return substr($field, 0, -3).'__r';
-                }
-
-                return $field;
+                return trim($field);
             }, explode(',', $fields)));
 
             $fieldString = $fieldList ? implode(', ', $fieldList) : 'FIELDS(ALL)';
