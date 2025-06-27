@@ -68,6 +68,25 @@ class Query
 
     protected function compileInclude(string $relation): string
     {
+        if (str_contains($relation, ':')) {
+            [$child, $fields] = explode(':', $relation, 2);
+            $childRelationship = $this->childRelationshipName($child) ?? $child;
+
+            $fieldList = array_filter(array_map(function ($field) {
+                $field = trim($field);
+
+                if (str_ends_with($field, '__c')) {
+                    return substr($field, 0, -3).'__r';
+                }
+
+                return $field;
+            }, explode(',', $fields)));
+
+            $fieldString = $fieldList ? implode(', ', $fieldList) : 'FIELDS(ALL)';
+
+            return sprintf('(SELECT %s FROM %s)', $fieldString, $childRelationship);
+        }
+
         $parts = explode('.', $relation, 2);
 
         $child = $parts[0];

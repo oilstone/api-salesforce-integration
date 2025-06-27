@@ -70,6 +70,31 @@ class AccountRepository extends ApiRepository
 
 The package's query resolver and transformer bridge the API pipeline to Salesforce so existing endpoints defined in `garethhudson07/api` continue to work with Salesforce data.
 
+### Including related records
+
+Use the `with` method when building a query to fetch related records. Pass the
+child object name (or relationship name) to include all fields for that
+relationship:
+
+```php
+$account = (new Repository('Account'))
+    ->newQuery()
+    ->with('Museum_Facility__c')
+    ->first();
+```
+
+You can target specific fields on the related object using a colon syntax:
+
+```php
+$account = (new Repository('Account'))
+    ->newQuery()
+    ->with('Contacts:FirstName,LastName')
+    ->first();
+```
+
+Related data is returned as a simple array of child records without the
+Salesforce metadata wrappers.
+
 ## Lookups
 
 Extend `Lookup` or `CachedLookup` to pull picklist values from Salesforce:
