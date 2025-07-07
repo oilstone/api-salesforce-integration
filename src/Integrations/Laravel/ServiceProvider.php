@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
+use Oilstone\ApiSalesforceIntegration\Integrations\Laravel\Console\ClearCache;
 
 class ServiceProvider extends BaseServiceProvider
 {
@@ -55,5 +56,11 @@ class ServiceProvider extends BaseServiceProvider
         $this->publishes([
             __DIR__.'/config/salesforce.php' => config_path('salesforce.php'),
         ], 'config');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                ClearCache::class,
+            ]);
+        }
     }
 }
