@@ -49,6 +49,7 @@ use Oilstone\ApiSalesforceIntegration\Repository;
 $http = new Client();
 $salesforce = new Salesforce($http, $instanceUrl, $accessToken);
 $accounts = (new Repository('Account'))
+    ->setClient($salesforce)
     ->setDefaultConstraints([['Type', 'Customer']])
     ->newQuery()
     ->where('Name', 'like', 'Acme%')
@@ -78,6 +79,7 @@ for that relationship by default:
 
 ```php
 $account = (new Repository('Account'))
+    ->setClient($salesforce)
     ->newQuery()
     ->with('Museum_Facility__c')
     ->first();
@@ -87,6 +89,7 @@ You can target specific fields on the related object using a colon syntax:
 
 ```php
 $account = (new Repository('Account'))
+    ->setClient($salesforce)
     ->newQuery()
     ->with('Contacts:FirstName,LastName')
     ->first();
