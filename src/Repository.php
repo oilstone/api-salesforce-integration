@@ -2,6 +2,7 @@
 
 namespace Oilstone\ApiSalesforceIntegration;
 
+use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 
 class Repository
@@ -10,7 +11,7 @@ class Repository
         protected string $object,
         protected array $defaultConstraints = [],
         protected array $defaultIncludes = [],
-        protected ?\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $cacheHandler = null,
+        protected ?QueryCacheHandler $cacheHandler = null,
     ) {}
 
     public function setDefaultConstraints(array $constraints): static
@@ -27,7 +28,7 @@ class Repository
         return $this;
     }
 
-    public function setCacheHandler(\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $handler): static
+    public function setCacheHandler(QueryCacheHandler $handler): static
     {
         $this->cacheHandler = $handler;
 

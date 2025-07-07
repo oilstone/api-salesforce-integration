@@ -5,6 +5,7 @@ namespace Oilstone\ApiSalesforceIntegration;
 use Aggregate\Set;
 use Api\Exceptions\InvalidQueryArgumentsException;
 use Api\Exceptions\UnknownOperatorException;
+use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 
 class Query
@@ -27,7 +28,7 @@ class Query
 
     protected ?int $offset = null;
 
-    protected ?\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $cacheHandler = null;
+    protected ?QueryCacheHandler $cacheHandler = null;
 
     public function __construct(string $object, Salesforce $client)
     {
@@ -35,7 +36,7 @@ class Query
         $this->client = $client;
     }
 
-    public function setCacheHandler(\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $handler): static
+    public function setCacheHandler(QueryCacheHandler $handler): static
     {
         $this->cacheHandler = $handler;
 
