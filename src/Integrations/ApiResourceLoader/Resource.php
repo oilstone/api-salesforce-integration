@@ -19,6 +19,20 @@ class Resource extends BaseResource
 
     protected ?string $repository = Repository::class;
 
+    protected ?int $cacheTtl = null;
+
+    public function setCacheTtl(?int $ttl): static
+    {
+        $this->cacheTtl = $ttl;
+
+        return $this;
+    }
+
+    public function cacheTtl(): ?int
+    {
+        return $this->cacheTtl;
+    }
+
     public function makeRepository(?Sentinel $sentinel = null, ...$params): ?Repository
     {
         if (isset($this->cached['repository'])) {
@@ -33,6 +47,16 @@ class Resource extends BaseResource
             ->setTransformer($this->makeTransformer($schema))
             ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints))
             ->setDefaultIncludes(array_merge($this->includes(), $this->includes));
+
+        if (method_exists($repository, 'setCacheHandler')) {
+            $handler = clone app(\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler::class);
+
+            if ($this->cacheTtl !== null) {
+                $handler->setTtl($this->cacheTtl);
+            }
+
+            $repository->setCacheHandler($handler);
+        }
 
         if (method_exists($repository, 'setSentinel')) {
             $repository->setSentinel($sentinel);
