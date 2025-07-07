@@ -22,6 +22,20 @@ class Resource extends BaseResource
 
     protected ?int $cacheTtl = null;
 
+    protected ?QueryCacheHandler $cacheHandler = null;
+
+    public function setCacheHandler(?QueryCacheHandler $handler): static
+    {
+        $this->cacheHandler = $handler;
+
+        return $this;
+    }
+
+    public function getCacheHandler(): ?QueryCacheHandler
+    {
+        return $this->cacheHandler;
+    }
+
     public function makeRepository(?Sentinel $sentinel = null, ...$params): ?Repository
     {
         if (isset($this->cached['repository'])) {
@@ -37,8 +51,8 @@ class Resource extends BaseResource
             ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints))
             ->setDefaultIncludes(array_merge($this->includes(), $this->includes));
 
-        if (method_exists($repository, 'setCacheHandler')) {
-            $handler = clone app(QueryCacheHandler::class);
+        if (method_exists($repository, 'setCacheHandler') && $this->cacheHandler) {
+            $handler = clone $this->cacheHandler;
 
             if ($this->cacheTtl !== null) {
                 $handler->setTtl($this->cacheTtl);
