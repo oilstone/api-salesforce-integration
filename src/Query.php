@@ -27,10 +27,19 @@ class Query
 
     protected ?int $offset = null;
 
+    protected ?\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $cacheHandler = null;
+
     public function __construct(string $object, Salesforce $client)
     {
         $this->object = $object;
         $this->client = $client;
+    }
+
+    public function setCacheHandler(\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $handler): static
+    {
+        $this->cacheHandler = $handler;
+
+        return $this;
     }
 
     public static function make(string $object, Salesforce $client): static
@@ -243,9 +252,17 @@ class Query
 
     public function get(): Set
     {
+        $soql = $this->toSoql();
+
+        $callback = fn () => $this->client->query($soql);
+
+        $results = $this->cacheHandler
+            ? $this->cacheHandler->remember($soql, $callback)
+            : $callback();
+
         return (new Set)->fill(array_map(
             fn (array $item) => (new Record)->fill($item),
-            $this->client->query($this->toSoql())
+            $results
         ));
     }
 

@@ -25,6 +25,8 @@ class Repository implements RepositoryInterface
 
     protected array $defaultIncludes = [];
 
+    protected ?\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $cacheHandler = null;
+
     public function __construct(
         protected string $object,
     ) {}
@@ -63,6 +65,13 @@ class Repository implements RepositoryInterface
     public function setDefaultIncludes(array $includes): static
     {
         $this->defaultIncludes = $includes;
+
+        return $this;
+    }
+
+    public function setCacheHandler(\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $handler): static
+    {
+        $this->cacheHandler = $handler;
 
         return $this;
     }
@@ -113,7 +122,13 @@ class Repository implements RepositoryInterface
 
     protected function newQuery(?string $object = null): Query
     {
-        return (new BaseRepository($object ?? $this->object, $this->defaultConstraints, $this->defaultIncludes))->newQuery();
+        $base = new BaseRepository($object ?? $this->object, $this->defaultConstraints, $this->defaultIncludes, $this->cacheHandler);
+
+        if ($this->cacheHandler) {
+            $base->setCacheHandler($this->cacheHandler);
+        }
+
+        return $base->newQuery();
     }
 
     protected function getDefaultFields(): array

@@ -7,12 +7,19 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
+use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 
 class ServiceProvider extends BaseServiceProvider
 {
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/config/salesforce.php', 'salesforce');
+
+        $this->app->singleton(QueryCacheHandler::class, function ($app) {
+            $cache = $app->make('cache.psr6');
+
+            return new QueryCacheHandler($cache);
+        });
 
         $this->app->singleton(Salesforce::class, function () {
             $config = config('salesforce');

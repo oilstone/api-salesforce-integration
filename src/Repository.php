@@ -10,6 +10,7 @@ class Repository
         protected string $object,
         protected array $defaultConstraints = [],
         protected array $defaultIncludes = [],
+        protected ?\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $cacheHandler = null,
     ) {}
 
     public function setDefaultConstraints(array $constraints): static
@@ -26,9 +27,20 @@ class Repository
         return $this;
     }
 
+    public function setCacheHandler(\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $handler): static
+    {
+        $this->cacheHandler = $handler;
+
+        return $this;
+    }
+
     public function newQuery(?string $object = null): Query
     {
         $query = new Query($object ?? $this->object, $this->getClient());
+
+        if ($this->cacheHandler) {
+            $query->setCacheHandler($this->cacheHandler);
+        }
 
         foreach ($this->defaultConstraints as $constraint) {
             if (is_array($constraint)) {
