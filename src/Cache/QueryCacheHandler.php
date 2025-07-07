@@ -26,7 +26,7 @@ class QueryCacheHandler
 
         if ($tags && method_exists($cache, 'tags') && method_exists($cache, 'getStore')) {
             $store = $cache->getStore();
-            if ($store instanceof \Illuminate\Contracts\Cache\TaggableStore) {
+            if ($store instanceof \Illuminate\Cache\TaggableStore) {
                 $cache = $cache->tags($tags);
             }
         }

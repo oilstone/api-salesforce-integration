@@ -2,9 +2,9 @@
 
 namespace Oilstone\ApiSalesforceIntegration\Integrations\Laravel\Console;
 
+use Illuminate\Cache\TaggableStore;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Contracts\Cache\TaggableStore;
 
 class ClearCache extends Command
 {
