@@ -6,8 +6,8 @@ use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
-use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
+use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 
 class ServiceProvider extends BaseServiceProvider
 {
@@ -15,16 +15,16 @@ class ServiceProvider extends BaseServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/config/salesforce.php', 'salesforce');
 
-        $this->app->singleton(QueryCacheHandler::class, function ($app) {
+        $config = config('salesforce');
+
+        $this->app->singleton(QueryCacheHandler::class, function ($app) use ($config) {
             $cache = $app->make('cache.psr6');
 
-            return new QueryCacheHandler($cache);
+            return new QueryCacheHandler($cache, $config['query_cache_default_ttl']);
         });
 
-        $this->app->singleton(Salesforce::class, function () {
-            $config = config('salesforce');
-
-            $client = new Client();
+        $this->app->singleton(Salesforce::class, function () use ($config) {
+            $client = new Client;
 
             $token = Cache::remember('salesforce.access_token', 55 * 60, function () use ($client, $config) {
                 $response = $client->post($config['instance_url'].'/services/oauth2/token', [

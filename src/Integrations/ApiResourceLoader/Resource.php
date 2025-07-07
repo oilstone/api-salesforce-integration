@@ -6,6 +6,7 @@ use Api\Guards\OAuth2\Sentinel;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Transformer;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository;
 use Oilstone\ApiResourceLoader\Resources\Resource as BaseResource;
+use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 
 class Resource extends BaseResource
 {
@@ -20,18 +21,6 @@ class Resource extends BaseResource
     protected ?string $repository = Repository::class;
 
     protected ?int $cacheTtl = null;
-
-    public function setCacheTtl(?int $ttl): static
-    {
-        $this->cacheTtl = $ttl;
-
-        return $this;
-    }
-
-    public function cacheTtl(): ?int
-    {
-        return $this->cacheTtl;
-    }
 
     public function makeRepository(?Sentinel $sentinel = null, ...$params): ?Repository
     {
@@ -49,7 +38,7 @@ class Resource extends BaseResource
             ->setDefaultIncludes(array_merge($this->includes(), $this->includes));
 
         if (method_exists($repository, 'setCacheHandler')) {
-            $handler = clone app(\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler::class);
+            $handler = clone app(QueryCacheHandler::class);
 
             if ($this->cacheTtl !== null) {
                 $handler->setTtl($this->cacheTtl);
@@ -99,6 +88,18 @@ class Resource extends BaseResource
     public function setIncludes(array $includes): static
     {
         $this->includes = $includes;
+
+        return $this;
+    }
+
+    public function cacheTtl(): ?int
+    {
+        return $this->cacheTtl;
+    }
+
+    public function setCacheTtl(?int $ttl): static
+    {
+        $this->cacheTtl = $ttl;
 
         return $this;
     }
