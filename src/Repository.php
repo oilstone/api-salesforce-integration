@@ -12,6 +12,7 @@ class Repository
         protected array $defaultConstraints = [],
         protected array $defaultIncludes = [],
         protected ?QueryCacheHandler $cacheHandler = null,
+        protected ?Salesforce $client = null,
     ) {}
 
     public function setDefaultConstraints(array $constraints): static
@@ -31,6 +32,13 @@ class Repository
     public function setCacheHandler(QueryCacheHandler $handler): static
     {
         $this->cacheHandler = $handler;
+
+        return $this;
+    }
+
+    public function setClient(Salesforce $client): static
+    {
+        $this->client = $client;
 
         return $this;
     }
@@ -142,6 +150,6 @@ class Repository
 
     protected function getClient(): Salesforce
     {
-        return app(Salesforce::class);
+        return $this->client ?? app(Salesforce::class);
     }
 }

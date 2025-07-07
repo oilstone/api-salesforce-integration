@@ -13,6 +13,13 @@ class Record extends Map implements ApiRecordContract
 
     protected static array $descriptions = [];
 
+    protected static ?Salesforce $client = null;
+
+    public static function setClient(Salesforce $client): void
+    {
+        self::$client = $client;
+    }
+
     public static function make(array $item): static
     {
         return (new static)->fill($item);
@@ -124,7 +131,7 @@ class Record extends Map implements ApiRecordContract
 
     protected function describe(string $object): array
     {
-        $client = app(Salesforce::class);
+        $client = self::$client ?? app(Salesforce::class);
 
         if (! array_key_exists($object, self::$descriptions)) {
             self::$descriptions[$object] = $client->describe($object);
