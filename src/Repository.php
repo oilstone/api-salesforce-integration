@@ -49,6 +49,7 @@ class Repository
 
         if ($this->cacheHandler) {
             $query->setCacheHandler($this->cacheHandler);
+            $query->setCacheTags([$object ?? $this->object]);
         }
 
         foreach ($this->defaultConstraints as $constraint) {
@@ -115,8 +116,12 @@ class Repository
     public function find(string $id, array $options = []): ?Record
     {
         $options['select'] = $options['select'] ?? ['FIELDS(ALL)'];
+        $query = $this->newQuery()->where('Id', $id);
+        if ($this->cacheHandler) {
+            $query->setCacheTags([$this->object, $this->object.':'.$id]);
+        }
 
-        return $this->applyOptions($this->newQuery()->where('Id', $id), $options)->first();
+        return $this->applyOptions($query, $options)->first();
     }
 
     public function first(array $options = []): ?Record

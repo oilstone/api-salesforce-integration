@@ -30,6 +30,8 @@ class Query
 
     protected ?QueryCacheHandler $cacheHandler = null;
 
+    protected array $cacheTags = [];
+
     public function __construct(string $object, Salesforce $client)
     {
         $this->object = $object;
@@ -41,6 +43,18 @@ class Query
         $this->cacheHandler = $handler;
 
         return $this;
+    }
+
+    public function setCacheTags(array $tags): static
+    {
+        $this->cacheTags = $tags;
+
+        return $this;
+    }
+
+    public function getCacheTags(): array
+    {
+        return $this->cacheTags;
     }
 
     public static function make(string $object, Salesforce $client): static
@@ -258,7 +272,7 @@ class Query
         $callback = fn () => $this->client->query($soql);
 
         $results = $this->cacheHandler
-            ? $this->cacheHandler->remember($soql, $callback)
+            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags)
             : $callback();
 
         return (new Set)->fill(array_map(

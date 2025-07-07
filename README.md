@@ -37,6 +37,13 @@ php artisan vendor:publish --tag=config --provider="Oilstone\\ApiSalesforceInteg
 
 Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger.
 
+If the cache store supports tagging, query results are tagged by the Salesforce object name and, for `find` queries, the record ID. You can clear cached results using the provided Artisan command:
+
+```bash
+php artisan salesforce:cache:clear Account
+php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX
+```
+
 ## Basic usage
 
 ### Stand‑alone

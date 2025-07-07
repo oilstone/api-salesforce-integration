@@ -19,12 +19,20 @@ class QueryCacheHandler
         return $this;
     }
 
-    public function remember(string $soql, callable $callback): array
+    public function remember(string $soql, callable $callback, array $tags = []): array
     {
         $key = $this->prefix.md5($soql);
+        $cache = $this->cache;
 
-        if ($this->cache->has($key)) {
-            $value = $this->cache->get($key);
+        if ($tags && method_exists($cache, 'tags') && method_exists($cache, 'getStore')) {
+            $store = $cache->getStore();
+            if ($store instanceof \Illuminate\Contracts\Cache\TaggableStore) {
+                $cache = $cache->tags($tags);
+            }
+        }
+
+        if ($cache->has($key)) {
+            $value = $cache->get($key);
             if (is_array($value)) {
                 return $value;
             }
@@ -32,7 +40,7 @@ class QueryCacheHandler
 
         $data = $callback();
 
-        $this->cache->set($key, $data, $this->ttl);
+        $cache->set($key, $data, $this->ttl);
 
         return $data;
     }
