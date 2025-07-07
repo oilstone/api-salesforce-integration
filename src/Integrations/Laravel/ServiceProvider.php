@@ -18,7 +18,7 @@ class ServiceProvider extends BaseServiceProvider
         $config = config('salesforce');
 
         $this->app->singleton(QueryCacheHandler::class, function ($app) use ($config) {
-            $cache = $app->make('cache.psr16');
+            $cache = $app->make('cache.store');
 
             return new QueryCacheHandler($cache, $config['query_cache_default_ttl']);
         });
