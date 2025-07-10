@@ -57,10 +57,8 @@ class ServiceProvider extends BaseServiceProvider
             __DIR__.'/config/salesforce.php' => config_path('salesforce.php'),
         ], 'config');
 
-        if ($this->app->runningInConsole()) {
-            $this->commands([
-                ClearCache::class,
-            ]);
-        }
+        $this->commands([
+            ClearCache::class,
+        ]);
     }
 }
