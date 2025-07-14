@@ -78,6 +78,20 @@ class Transformer implements Contract
                 }
             }
 
+            if ($property->hasMeta('isYesNo')) {
+                $value = $value !== null ? strtolower((string) $value) === 'yes' : null;
+            }
+
+            if ($property->hasMeta('isAddressLine')) {
+                $lines = preg_split('/\r\n|\n|\r/', (string) $value);
+
+                for ($i = 1; $i <= 3; $i++) {
+                    $transformed[$property->getName() . $i] = $lines[$i - 1] ?? null;
+                }
+
+                continue;
+            }
+
             $transformed[$property->getName()] = $value;
         }
 
@@ -104,7 +118,30 @@ class Transformer implements Contract
             }
 
             $key = $property->alias ?: $property->getName();
-            $value = $attributes[$property->getName()];
+
+            if ($property->hasMeta('isAddressLine')) {
+                $lines = [];
+
+                for ($i = 1; $i <= 3; $i++) {
+                    $lineKey = $property->getName() . $i;
+
+                    if (array_key_exists($lineKey, $attributes)) {
+                        $lines[] = $attributes[$lineKey];
+                    }
+                }
+
+                if (empty($lines) && array_key_exists($property->getName(), $attributes)) {
+                    $lines = preg_split('/\r\n|\n|\r/', (string) $attributes[$property->getName()]);
+                }
+
+                $value = implode("\n", array_filter($lines, fn($line) => $line !== null && $line !== ''));
+            } else {
+                $value = $attributes[$property->getName()];
+            }
+
+            if ($property->hasMeta('isYesNo') && $value !== null) {
+                $value = $value ? 'Yes' : 'No';
+            }
 
             if ($value) {
                 switch ($property->getType()) {
