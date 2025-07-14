@@ -113,10 +113,6 @@ class Transformer implements Contract
                 continue;
             }
 
-            if (! array_key_exists($property->getName(), $attributes)) {
-                continue;
-            }
-
             $key = $property->alias ?: $property->getName();
 
             if ($property->hasMeta('isAddressLine')) {
@@ -136,7 +132,7 @@ class Transformer implements Contract
 
                 $value = implode("\n", array_filter($lines, fn($line) => $line !== null && $line !== ''));
             } else {
-                $value = $attributes[$property->getName()];
+                $value = $attributes[$property->getName()] ?? null;
             }
 
             if ($property->hasMeta('isYesNo') && $value !== null) {
