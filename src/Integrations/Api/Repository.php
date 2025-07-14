@@ -131,20 +131,58 @@ class Repository implements RepositoryInterface
         return $base->newQuery();
     }
 
+    /**
+     * Gets the default fields from the schema, including nested schema properties.
+     *
+     * @return array A flat array of unique field names.
+     */
     protected function getDefaultFields(): array
     {
         $fields = [];
 
-        if ($this->schema && $this->schema->getPrimary()) {
-            $fields[] = $this->schema->getPrimary()->alias ?: $this->schema->getPrimary()->getName();
-        }
-
-        if ($this->schema && $this->schema->getProperties()) {
-            foreach ($this->schema->getProperties() as $property) {
-                $fields[] = $property->alias ?: $property->getName();
-            }
+        if ($this->schema) {
+            $fields = $this->extractSchemaFields($this->schema);
         }
 
         return array_unique($fields);
+    }
+
+    /**
+     * Recursively extracts fields from a schema, handling nested schemas and aliasing.
+     *
+     * @param Schema $schema The schema object to process.
+     * @param string $prefix The prefix to prepend to all fields found in this schema.
+     * @return array A flat array of field names.
+     */
+    protected function extractSchemaFields($schema, string $prefix = ''): array
+    {
+        $fields = [];
+
+        if ($schema->getPrimary()) {
+            $primaryField = $schema->getPrimary()->alias ?: $schema->getPrimary()->getName();
+            $fields[] = $prefix . $primaryField;
+        }
+
+        if (!$schema->getProperties()) {
+            return $fields;
+        }
+
+        foreach ($schema->getProperties() as $property) {
+            if ($property->getType() === 'schema' && $property->getAccepts()) {
+                $nestedPrefix = $property->alias ? $property->alias . '.' : '';
+
+                $nestedFields = $this->extractSchemaFields(
+                    $property->getAccepts(),
+                    $prefix . $nestedPrefix
+                );
+
+                $fields = array_merge($fields, $nestedFields);
+            } else {
+                $fieldName = $property->alias ?: $property->getName();
+                $fields[] = $prefix . $fieldName;
+            }
+        }
+
+        return $fields;
     }
 }
