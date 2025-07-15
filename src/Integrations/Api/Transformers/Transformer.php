@@ -134,7 +134,7 @@ class Transformer implements Contract
                     $lines = preg_split('/\r\n|\n|\r/', (string) $attributes[$property->getName()]);
                 }
 
-                $value = implode("\n", array_filter($lines, fn($line) => $line !== null && $line !== ''));
+                $value = trim(implode("\n", array_filter($lines, fn($line) => $line !== null && $line !== ''))) ?: null;
             } else {
                 $value = $attributes[$property->getName()] ?? null;
             }

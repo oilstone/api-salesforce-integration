@@ -120,6 +120,8 @@ class Repository implements RepositoryInterface
             $request->getParsedBody()->toArray()
         );
 
+        $fields = array_filter($fields, fn($value) => isset($value));
+
         $result = $this->repository($object)->create($fields);
 
         return $this->repository($object)->find($result['id']);
