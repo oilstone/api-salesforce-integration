@@ -78,11 +78,10 @@ class Repository implements RepositoryInterface
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
     {
-        return (new QueryResolver(
-            $this->newQuery(),
-            $pipe,
-            $this->getDefaultFields(),
-        ))->byKey();
+        return $this->repository()->find(
+            $pipe->getKey(),
+            ['select' => $this->getDefaultFields()]
+        );
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
@@ -98,8 +97,16 @@ class Repository implements RepositoryInterface
 
     public function getRecord(Pipe $pipe, ServerRequestInterface $request): ?ResultRecordInterface
     {
+        $object = $request->getQueryParams()['object'] ?? null;
+        $query = $this->newQuery($object);
+
+        $query->setCacheTags([
+            $object ?? $this->object,
+            ($object ?? $this->object) . ':' . $pipe->getKey(),
+        ]);
+
         return (new QueryResolver(
-            $this->newQuery($request->getQueryParams()['object'] ?? null),
+            $query,
             $pipe,
             $this->getDefaultFields(),
         ))->record($request);
