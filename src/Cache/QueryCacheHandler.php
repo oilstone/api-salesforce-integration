@@ -44,4 +44,20 @@ class QueryCacheHandler
 
         return $data;
     }
+
+    /**
+     * Flush cached queries associated with the provided tags.
+     */
+    public function flush(array $tags): void
+    {
+        $cache = $this->cache;
+
+        if ($tags && method_exists($cache, 'tags') && method_exists($cache, 'getStore')) {
+            $store = $cache->getStore();
+
+            if ($store instanceof \Illuminate\Cache\TaggableStore) {
+                $cache->tags($tags)->flush();
+            }
+        }
+    }
 }

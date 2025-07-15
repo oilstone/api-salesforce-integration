@@ -44,6 +44,11 @@ php artisan salesforce:cache:clear Account
 php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX
 ```
 
+Cached results for a specific record are automatically cleared when the
+repository's `update` or `delete` methods are used with a configured
+`QueryCacheHandler`. Only the tag for that particular record is flushed so
+cached queries for other records remain intact.
+
 ## Basic usage
 
 ### Stand‑alone

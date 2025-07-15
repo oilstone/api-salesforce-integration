@@ -145,12 +145,24 @@ class Repository
 
     public function update(string $id, array $attributes): array
     {
-        return $this->getClient()->update($this->object, $id, $attributes);
+        $result = $this->getClient()->update($this->object, $id, $attributes);
+
+        if ($this->cacheHandler) {
+            $this->cacheHandler->flush([$this->object.':'.$id]);
+        }
+
+        return $result;
     }
 
     public function delete(string $id): array
     {
-        return $this->getClient()->delete($this->object, $id);
+        $result = $this->getClient()->delete($this->object, $id);
+
+        if ($this->cacheHandler) {
+            $this->cacheHandler->flush([$this->object.':'.$id]);
+        }
+
+        return $result;
     }
 
     protected function getClient(): Salesforce
