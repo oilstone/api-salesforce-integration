@@ -9,7 +9,6 @@ use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer;
 use Oilstone\ApiSalesforceIntegration\Collection;
-use Oilstone\ApiSalesforceIntegration\Exceptions\MethodNotAllowedException;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
@@ -153,10 +152,6 @@ class Repository implements RepositoryInterface
             $this->defaultIncludes,
             $this->cacheHandler
         );
-
-        if ($this->cacheHandler) {
-            $repository->setCacheHandler($this->cacheHandler);
-        }
 
         return $repository;
     }
