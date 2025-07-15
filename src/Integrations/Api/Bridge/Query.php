@@ -21,9 +21,6 @@ class Query
         'IS NOT NULL' => null,
     ];
 
-    /**
-     * Query constructor.
-     */
     public function __construct(
         protected SalesforceQuery $baseQuery
     ) { }
