@@ -103,6 +103,10 @@ class Transformer implements Contract
         $reversed = [];
 
         foreach ($schema->getProperties() as $property) {
+            if ($property->hasMeta('readonly')) {
+                continue;
+            }
+
             if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
                 $value = $attributes[$property->getName()] ?? [];
 
