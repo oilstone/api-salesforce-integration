@@ -9,7 +9,6 @@ use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer;
 use Oilstone\ApiSalesforceIntegration\Collection;
-use Oilstone\ApiSalesforceIntegration\Exceptions\MethodNotAllowedException;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
@@ -107,28 +106,54 @@ class Repository implements RepositoryInterface
 
     public function create(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
     {
-        throw new MethodNotAllowedException;
+        $object = $request->getQueryParams()['object'] ?? null;
+
+        $attributes = $pipe->getResource()->getTransformer()->reverse(
+            $request->getParsedBody()->toArray()
+        );
+
+        $result = $this->repository($object)->create($attributes);
+
+        return $this->repository($object)->find($result['id']);
     }
 
     public function update(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
     {
-        throw new MethodNotAllowedException;
+        $object = $request->getQueryParams()['object'] ?? null;
+
+        $fields = $pipe->getResource()->getTransformer()->reverse(
+            $request->getParsedBody()->toArray()
+        );
+
+        $this->repository($object)->update($pipe->getKey(), $fields);
+
+        return $this->getByKey($pipe);
     }
 
     public function delete(Pipe $pipe): ResultRecordInterface
     {
-        throw new MethodNotAllowedException;
+        $record = $this->getByKey($pipe);
+
+        $this->repository()->delete($pipe->getKey());
+
+        return $record;
     }
 
     protected function newQuery(?string $object = null): Query
     {
-        $base = new BaseRepository($object ?? $this->object, $this->defaultConstraints, $this->defaultIncludes, $this->cacheHandler);
+        return $this->repository($object)->newQuery();
+    }
 
-        if ($this->cacheHandler) {
-            $base->setCacheHandler($this->cacheHandler);
-        }
+    protected function repository(?string $object = null): BaseRepository
+    {
+        $repository = new BaseRepository(
+            $object ?? $this->object,
+            $this->defaultConstraints,
+            $this->defaultIncludes,
+            $this->cacheHandler
+        );
 
-        return $base->newQuery();
+        return $repository;
     }
 
     /**
