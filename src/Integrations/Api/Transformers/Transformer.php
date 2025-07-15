@@ -103,7 +103,7 @@ class Transformer implements Contract
         $reversed = [];
 
         foreach ($schema->getProperties() as $property) {
-            if ($property->hasMeta('readonly')) {
+            if ($property->hasMeta('readonly') || $property->hasMeta('validationOnly')) {
                 continue;
             }
 

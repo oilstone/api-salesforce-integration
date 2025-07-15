@@ -8,6 +8,7 @@ use Api\Result\Contracts\Collection as ResultCollectionInterface;
 use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer;
+use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Collection;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
@@ -24,7 +25,7 @@ class Repository implements RepositoryInterface
 
     protected array $defaultIncludes = [];
 
-    protected ?\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $cacheHandler = null;
+    protected ?QueryCacheHandler $cacheHandler = null;
 
     public function __construct(
         protected string $object,
@@ -68,7 +69,7 @@ class Repository implements RepositoryInterface
         return $this;
     }
 
-    public function setCacheHandler(\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $handler): static
+    public function setCacheHandler(QueryCacheHandler $handler): static
     {
         $this->cacheHandler = $handler;
 
@@ -108,11 +109,11 @@ class Repository implements RepositoryInterface
     {
         $object = $request->getQueryParams()['object'] ?? null;
 
-        $attributes = $pipe->getResource()->getTransformer()->reverse(
+        $fields = $pipe->getResource()->getTransformer()->reverse(
             $request->getParsedBody()->toArray()
         );
 
-        $result = $this->repository($object)->create($attributes);
+        $result = $this->repository($object)->create($fields);
 
         return $this->repository($object)->find($result['id']);
     }
@@ -146,14 +147,12 @@ class Repository implements RepositoryInterface
 
     protected function repository(?string $object = null): BaseRepository
     {
-        $repository = new BaseRepository(
+        return new BaseRepository(
             $object ?? $this->object,
             $this->defaultConstraints,
             $this->defaultIncludes,
             $this->cacheHandler
         );
-
-        return $repository;
     }
 
     /**
@@ -193,6 +192,10 @@ class Repository implements RepositoryInterface
         }
 
         foreach ($schema->getProperties() as $property) {
+            if ($property->hasMeta('validationOnly')) {
+                continue;
+            }
+
             if ($property->getType() === 'schema' && $property->getAccepts()) {
                 $nestedPrefix = $property->alias ? $property->alias . '.' : '';
 

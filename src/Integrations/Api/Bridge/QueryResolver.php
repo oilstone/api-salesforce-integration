@@ -18,7 +18,7 @@ class QueryResolver
 
     public function byKey(): ?Record
     {
-        return $this->keyedQuery()->first();
+        return (new Query($this->keyedQuery()))->select($this->defaultFields ?: ['FIELDS(ALL)'])->first();
     }
 
     public function record(ServerRequestInterface $request): ?Record
