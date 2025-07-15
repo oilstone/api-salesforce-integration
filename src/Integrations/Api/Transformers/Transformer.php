@@ -86,7 +86,7 @@ class Transformer implements Contract
                 $lines = preg_split('/\r\n|\n|\r/', (string) $value);
 
                 for ($i = 1; $i <= 3; $i++) {
-                    $transformed[$property->getName() . $i] = $lines[$i - 1] ?? null;
+                    $transformed[$property->getName() . $i] = ($lines[$i - 1] ?? null) ?: null;
                 }
 
                 continue;
