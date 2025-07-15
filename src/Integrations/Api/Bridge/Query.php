@@ -149,10 +149,6 @@ class Query
         }
 
         if ($property) {
-            if ($property->hasMeta('isYesNo') && $value !== null) {
-                $value = $value ? 'Yes' : 'No';
-            }
-
             switch ($property->getType()) {
                 case 'boolean':
                     if (is_string($value)) {
@@ -189,6 +185,10 @@ class Query
                         $value = Carbon::parse($value)->toDateTimeString();
                     }
                     break;
+            }
+
+            if ($property->hasMeta('isYesNo') && $value !== null) {
+                $value = $value ? 'Yes' : 'No';
             }
         }
 
