@@ -8,6 +8,7 @@ use Api\Queries\Paths\Path;
 use Api\Queries\Relations as RequestRelations;
 use Oilstone\ApiSalesforceIntegration\Query as SalesforceQuery;
 use Oilstone\ApiSalesforceIntegration\Record;
+use Carbon\Carbon;
 
 class Query
 {
@@ -141,10 +142,54 @@ class Query
      */
     protected function resolveConstraintValue($operator, $value, ?Path $path = null)
     {
-        $property = $path->getEntity();
+        $property = $path?->getEntity();
 
         if (array_key_exists($operator, $this::VALUE_MAP)) {
             $value = $this::VALUE_MAP[$operator];
+        }
+
+        if ($property) {
+            if ($property->hasMeta('isYesNo') && $value !== null) {
+                $value = $value ? 'Yes' : 'No';
+            }
+
+            switch ($property->getType()) {
+                case 'boolean':
+                    if (is_string($value)) {
+                        $lower = strtolower($value);
+                        if (in_array($lower, ['true', '1', 'yes'])) {
+                            $value = 1;
+                        } elseif (in_array($lower, ['false', '0', 'no'])) {
+                            $value = 0;
+                        }
+                    }
+
+                    $value = $value ? 1 : 0;
+                    break;
+
+                case 'integer':
+                    $value = $value !== null ? (int) $value : $value;
+                    break;
+
+                case 'float':
+                case 'decimal':
+                case 'number':
+                    $value = $value !== null ? (float) $value : $value;
+                    break;
+
+                case 'date':
+                    if ($value) {
+                        $value = Carbon::parse($value)->toDateString();
+                    }
+                    break;
+
+                case 'datetime':
+                case 'timestamp':
+                    if ($value) {
+                        $value = Carbon::parse($value)->toDateTimeString();
+                    }
+                    break;
+            }
         }
 
         return $value;
