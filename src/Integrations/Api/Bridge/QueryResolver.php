@@ -18,7 +18,16 @@ class QueryResolver
 
     public function byKey(): ?Record
     {
-        return (new Query($this->keyedQuery()))->select($this->defaultFields ?: ['FIELDS(ALL)'])->first();
+        $query = $this->keyedQuery();
+
+        $query->setCacheTags([
+            $query->getObject(),
+            $query->getObject() . ':' . $this->pipe->getKey(),
+        ]);
+
+        return (new Query($query))
+            ->select($this->defaultFields ?: ['FIELDS(ALL)'])
+            ->first();
     }
 
     public function record(ServerRequestInterface $request): ?Record
