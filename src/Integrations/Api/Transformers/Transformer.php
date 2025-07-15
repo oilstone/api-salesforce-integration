@@ -39,6 +39,10 @@ class Transformer implements Contract
         $transformed = [];
 
         foreach ($schema->getProperties() as $property) {
+            if ($property->hasMeta('validationOnly')) {
+                continue;
+            }
+
             if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
                 $transformed[$property->getName()] = $this->transformSchema($property->getAccepts(), $attributes);
 
