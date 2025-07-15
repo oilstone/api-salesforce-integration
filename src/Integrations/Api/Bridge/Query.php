@@ -106,7 +106,7 @@ class Query
                 $query->{$method}(
                     $this->resolvePropertyPath($constraint->getPath()),
                     $this->resolveConstraintOperator($operator),
-                    $this->resolveConstraintValue($operator, $constraint->getValue())
+                    $this->resolveConstraintValue($operator, $constraint->getValue(), $constraint->getPath())
                 );
             }
         }
@@ -139,8 +139,10 @@ class Query
     /**
      * @return mixed
      */
-    protected function resolveConstraintValue($operator, $value)
+    protected function resolveConstraintValue($operator, $value, ?Path $path = null)
     {
+        $property = $path->getEntity();
+
         if (array_key_exists($operator, $this::VALUE_MAP)) {
             $value = $this::VALUE_MAP[$operator];
         }
