@@ -87,11 +87,10 @@ class Transformer implements Contract
             }
 
             if ($property->hasMeta('isAddressLine')) {
+                $line = (int) $property->isAddressLine;
                 $lines = preg_split('/\r\n|\n|\r/', (string) $value);
 
-                for ($i = 1; $i <= 3; $i++) {
-                    $transformed[$property->getName() . $i] = ($lines[$i - 1] ?? null) ?: null;
-                }
+                $transformed[$property->getName()] = ($lines[$line - 1] ?? null) ?: null;
 
                 continue;
             }
@@ -105,6 +104,7 @@ class Transformer implements Contract
     protected function reverseSchema(Schema $schema, array $attributes): array
     {
         $reversed = [];
+        $addressLines = [];
 
         foreach ($schema->getProperties() as $property) {
             if ($property->hasMeta('readonly') || $property->hasMeta('validationOnly')) {
@@ -124,24 +124,24 @@ class Transformer implements Contract
             $key = $property->alias ?: $property->getName();
 
             if ($property->hasMeta('isAddressLine')) {
-                $lines = [];
+                $line = (int) $property->isAddressLine;
+                $lineValue = $attributes[$property->getName()] ?? null;
 
-                for ($i = 1; $i <= 3; $i++) {
-                    $lineKey = $property->getName() . $i;
-
-                    if (array_key_exists($lineKey, $attributes)) {
-                        $lines[] = $attributes[$lineKey];
-                    }
+                if ($lineValue === null && array_key_exists($key, $attributes)) {
+                    $lines = preg_split('/\r\n|\n|\r/', (string) $attributes[$key]);
+                    $lineValue = $lines[$line - 1] ?? null;
                 }
 
-                if (empty($lines) && array_key_exists($property->getName(), $attributes)) {
-                    $lines = preg_split('/\r\n|\n|\r/', (string) $attributes[$property->getName()]);
+                if (! isset($addressLines[$key])) {
+                    $addressLines[$key] = [];
                 }
 
-                $value = trim(implode("\n", array_filter($lines, fn($line) => $line !== null && $line !== ''))) ?: null;
-            } else {
-                $value = $attributes[$property->getName()] ?? null;
+                $addressLines[$key][$line] = $lineValue;
+
+                continue;
             }
+
+            $value = $attributes[$property->getName()] ?? null;
 
             if ($property->hasMeta('isYesNo') && $value !== null) {
                 $value = $value ? 'Yes' : 'No';
@@ -167,6 +167,31 @@ class Transformer implements Contract
             }
 
             $path = explode('.', $key);
+            $current = &$reversed;
+
+            while (count($path) > 1) {
+                $segment = array_shift($path);
+
+                if (! isset($current[$segment]) || ! is_array($current[$segment])) {
+                    $current[$segment] = [];
+                }
+
+                $current = &$current[$segment];
+            }
+
+            $current[$path[0]] = $value;
+        }
+
+        foreach ($addressLines as $alias => $lines) {
+
+            if (array_key_exists($alias, $attributes) && is_string($attributes[$alias])) {
+                $value = $attributes[$alias];
+            } else {
+                ksort($lines);
+                $value = trim(implode("\n", array_filter($lines, fn($line) => $line !== null && $line !== ''))) ?: null;
+            }
+
+            $path = explode('.', $alias);
             $current = &$reversed;
 
             while (count($path) > 1) {
