@@ -134,10 +134,10 @@ class Transformer implements Contract
                 }
 
                 if (! isset($addressLines[$key])) {
-                    $addressLines[$key] = ['property' => $property, 'lines' => []];
+                    $addressLines[$key] = [];
                 }
 
-                $addressLines[$key]['lines'][$line] = $lineValue;
+                $addressLines[$key][$line] = $lineValue;
 
                 continue;
             }
@@ -183,35 +183,12 @@ class Transformer implements Contract
             $current[$path[0]] = $value;
         }
 
-        foreach ($addressLines as $alias => $data) {
-            /** @var SchemaProperty $prop */
-            $prop = $data['property'];
-            $lines = $data['lines'];
-
+        foreach ($addressLines as $alias => $lines) {
             if (array_key_exists($alias, $attributes) && is_string($attributes[$alias])) {
                 $value = $attributes[$alias];
             } else {
                 ksort($lines);
                 $value = trim(implode("\n", array_filter($lines, fn($line) => $line !== null && $line !== ''))) ?: null;
-            }
-
-            if ($value) {
-                switch ($prop->getType()) {
-                    case 'date':
-                        $value = Carbon::parse($value)->toDateString();
-                        break;
-
-                    case 'datetime':
-                    case 'timestamp':
-                        $value = Carbon::parse($value)->toDateTimeString();
-                        break;
-
-                    case 'collection':
-                        $value = array_values(array_filter(array_map(function ($item) use ($prop) {
-                            return $item ? $this->reverseSchema($prop->getAccepts(), $item) : null;
-                        }, $value)));
-                        break;
-                }
             }
 
             $path = explode('.', $alias);
