@@ -4,6 +4,7 @@ namespace Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers;
 
 use Api\Result\Contracts\Record;
 use Api\Schema\Schema;
+use Api\Schema\Property as SchemaProperty;
 use Api\Transformers\Contracts\Transformer as Contract;
 use Carbon\Carbon;
 
@@ -183,7 +184,6 @@ class Transformer implements Contract
         }
 
         foreach ($addressLines as $alias => $lines) {
-
             if (array_key_exists($alias, $attributes) && is_string($attributes[$alias])) {
                 $value = $attributes[$alias];
             } else {
