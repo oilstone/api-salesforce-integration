@@ -170,13 +170,14 @@ class Repository implements RepositoryInterface
 
     protected function repository(?string $object = null): BaseRepository
     {
-        return (new BaseRepository(
+        return new BaseRepository(
             $object ?? $this->object,
             $this->defaultConstraints,
             $this->defaultIncludes,
+            $this->getDefaultValues(),
             $this->identifier,
             $this->cacheHandler,
-        ));
+        );
     }
 
     public function __call(string $method, array $parameters)
@@ -251,5 +252,60 @@ class Repository implements RepositoryInterface
         }
 
         return $fields;
+    }
+
+    /**
+     * Retrieve default attribute values defined in the schema.
+     */
+    protected function getDefaultValues(): array
+    {
+        return $this->schema ? $this->extractSchemaDefaults($this->schema) : [];
+    }
+
+    /**
+     * Recursively extract default values from the provided schema.
+     */
+    protected function extractSchemaDefaults(Schema $schema, string $prefix = ''): array
+    {
+        $defaults = [];
+
+        foreach ($schema->getProperties() as $property) {
+            if ($property->hasMeta('readonly') || $property->hasMeta('validationOnly')) {
+                continue;
+            }
+
+            $key = $property->alias ?: $property->getName();
+
+            if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
+                $nested = $this->extractSchemaDefaults($property->getAccepts(), $prefix . $key . '.');
+                $defaults = array_replace_recursive($defaults, $nested);
+                continue;
+            }
+
+            if ($property->hasMeta('default')) {
+                $value = $property->default;
+
+                if ($property->hasMeta('isYesNo') && $value !== null) {
+                    $value = $value ? 'Yes' : 'No';
+                }
+
+                $path = explode('.', $prefix . $key);
+                $current = &$defaults;
+
+                while (count($path) > 1) {
+                    $segment = array_shift($path);
+
+                    if (! isset($current[$segment]) || ! is_array($current[$segment])) {
+                        $current[$segment] = [];
+                    }
+
+                    $current = &$current[$segment];
+                }
+
+                $current[$path[0]] = $value;
+            }
+        }
+
+        return $defaults;
     }
 }

@@ -11,6 +11,11 @@ class Repository
         protected string $object,
         protected array $defaultConstraints = [],
         protected array $defaultIncludes = [],
+        /**
+         * Default attribute values that are merged with any data passed to
+         * create or update methods.
+         */
+        protected array $defaultValues = [],
         protected string $defaultIdentifier = 'Id',
         protected ?QueryCacheHandler $cacheHandler = null,
         protected ?Salesforce $client = null,
@@ -35,6 +40,24 @@ class Repository
         $this->defaultIdentifier = $identifier;
 
         return $this;
+    }
+
+    /**
+     * Set default attribute values.
+     */
+    public function setDefaultValues(array $values): static
+    {
+        $this->defaultValues = $values;
+
+        return $this;
+    }
+
+    /**
+     * Retrieve the default attribute values.
+     */
+    public function getDefaultValues(): array
+    {
+        return $this->defaultValues;
     }
 
     public function getIdentifier(): string
@@ -202,12 +225,18 @@ class Repository
 
     public function create(array $attributes): array
     {
-        return $this->getClient()->create($this->object, $attributes);
+        $payload = array_replace_recursive($this->defaultValues, $attributes);
+        $payload = array_filter($payload, fn ($value) => isset($value));
+
+        return $this->getClient()->create($this->object, $payload);
     }
 
     public function update(string $id, array $attributes): array
     {
-        $result = $this->getClient()->update($this->object, $id, $attributes);
+        $payload = array_replace_recursive($this->defaultValues, $attributes);
+        $payload = array_filter($payload, fn ($value) => isset($value));
+
+        $result = $this->getClient()->update($this->object, $id, $payload);
 
         if ($this->cacheHandler) {
             $this->cacheHandler->flush([$this->object.':'.$id]);
