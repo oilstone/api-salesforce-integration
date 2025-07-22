@@ -14,7 +14,9 @@ class Query
 
     protected Salesforce $client;
 
-    protected array $selects = ['Id'];
+    protected string $identifier;
+
+    protected array $selects = [];
 
     protected array $relationships = [];
 
@@ -32,10 +34,12 @@ class Query
 
     protected array $cacheTags = [];
 
-    public function __construct(string $object, Salesforce $client)
+    public function __construct(string $object, Salesforce $client, string $identifier = 'Id')
     {
         $this->object = $object;
         $this->client = $client;
+        $this->identifier = $identifier;
+        $this->selects = [$identifier];
     }
 
     public function setCacheHandler(QueryCacheHandler $handler): static
@@ -57,9 +61,9 @@ class Query
         return $this->cacheTags;
     }
 
-    public static function make(string $object, Salesforce $client): static
+    public static function make(string $object, Salesforce $client, string $identifier = 'Id'): static
     {
-        return new static($object, $client);
+        return new static($object, $client, $identifier);
     }
 
     public function getObject(): ?string
@@ -70,6 +74,18 @@ class Query
     public function setObject(string $object): static
     {
         $this->object = $object;
+
+        return $this;
+    }
+
+    public function getIdentifier(): string
+    {
+        return $this->identifier;
+    }
+
+    public function setIdentifier(string $identifier): static
+    {
+        $this->identifier = $identifier;
 
         return $this;
     }
@@ -116,7 +132,7 @@ class Query
         }, explode(',', $fields)));
 
         if (! $fieldList) {
-            $fieldList = ['Id', 'Name'];
+            $fieldList = [$this->identifier, 'Name'];
         }
 
         if ($prefix) {
@@ -290,7 +306,7 @@ class Query
 
     protected function toSoql(): string
     {
-        $select = implode(', ', array_merge($this->selects ?: ['Id'], $this->relationships));
+        $select = implode(', ', array_merge($this->selects ?: [$this->identifier], $this->relationships));
         $query = "SELECT {$select} FROM {$this->object}";
 
         if ($this->conditions) {

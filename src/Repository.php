@@ -11,6 +11,7 @@ class Repository
         protected string $object,
         protected array $defaultConstraints = [],
         protected array $defaultIncludes = [],
+        protected string $defaultIdentifier = 'Id',
         protected ?QueryCacheHandler $cacheHandler = null,
         protected ?Salesforce $client = null,
     ) {}
@@ -29,6 +30,18 @@ class Repository
         return $this;
     }
 
+    public function setIdentifier(string $identifier): static
+    {
+        $this->defaultIdentifier = $identifier;
+
+        return $this;
+    }
+
+    public function getIdentifier(): string
+    {
+        return $this->defaultIdentifier;
+    }
+
     public function setCacheHandler(QueryCacheHandler $handler): static
     {
         $this->cacheHandler = $handler;
@@ -45,7 +58,7 @@ class Repository
 
     public function newQuery(?string $object = null): Query
     {
-        $query = new Query($object ?? $this->object, $this->getClient());
+        $query = new Query($object ?? $this->object, $this->getClient(), $this->defaultIdentifier);
 
         if ($this->cacheHandler) {
             $query->setCacheHandler($this->cacheHandler);
@@ -133,7 +146,7 @@ class Repository
         $options['select'] = $options['select'] ?? ['FIELDS(ALL)'];
 
         if ($id !== null) {
-            $query->where('Id', $id);
+            $query->where($this->defaultIdentifier, $id);
 
             if ($this->cacheHandler) {
                 $query->setCacheTags([$this->object, $this->object.':'.$id]);
@@ -176,7 +189,7 @@ class Repository
             $conditions = $conditionsOrOptions;
         }
 
-        $options['select'] = $options['select'] ?? ['Id'];
+        $options['select'] = $options['select'] ?? [$this->defaultIdentifier];
 
         $query = $this->newQuery();
 
@@ -246,11 +259,11 @@ class Repository
             $query->where($field, $value);
         }
 
-        $record = $this->applyOptions($query, ['select' => ['Id']])->first();
+        $record = $this->applyOptions($query, ['select' => [$this->defaultIdentifier]])->first();
 
         if ($record) {
-            $this->update($record['Id'], $values);
-            return $this->find($record['Id']);
+            $this->update($record[$this->defaultIdentifier], $values);
+            return $this->find($record[$this->defaultIdentifier]);
         }
 
         $result = $this->create(array_merge($attributes, $values));

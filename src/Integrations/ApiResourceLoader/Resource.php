@@ -16,6 +16,8 @@ class Resource extends BaseResource
 
     protected array $includes = [];
 
+    protected string $identifier = 'Id';
+
     protected ?string $transformer = Transformer::class;
 
     protected ?string $repository = Repository::class;
@@ -49,7 +51,8 @@ class Resource extends BaseResource
             ->setSchema($schema)
             ->setTransformer($this->makeTransformer($schema))
             ->setDefaultConstraints(array_merge($this->constraints(), $this->constraints))
-            ->setDefaultIncludes(array_merge($this->includes(), $this->includes));
+            ->setDefaultIncludes(array_merge($this->includes(), $this->includes))
+            ->setIdentifier($this->identifier);
 
         if (method_exists($repository, 'setCacheHandler') && $this->cacheHandler) {
             $handler = clone $this->cacheHandler;
@@ -102,6 +105,18 @@ class Resource extends BaseResource
     public function setIncludes(array $includes): static
     {
         $this->includes = $includes;
+
+        return $this;
+    }
+
+    public function identifier(): string
+    {
+        return $this->identifier;
+    }
+
+    public function setIdentifier(string $identifier): static
+    {
+        $this->identifier = $identifier;
 
         return $this;
     }

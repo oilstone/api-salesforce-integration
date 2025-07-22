@@ -78,6 +78,8 @@ use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository as ApiReposito
 class AccountRepository extends ApiRepository
 {
     protected string $object = 'Account';
+    // Optionally customise the identifier column
+    protected string $identifier = 'External_Id__c';
 }
 ```
 
