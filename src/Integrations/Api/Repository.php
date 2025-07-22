@@ -163,12 +163,7 @@ class Repository implements RepositoryInterface
         return $record;
     }
 
-    protected function newQuery(?string $object = null): Query
-    {
-        return $this->repository($object)->newQuery();
-    }
-
-    protected function repository(?string $object = null): BaseRepository
+    public function repository(?string $object = null): BaseRepository
     {
         return new BaseRepository(
             $object ?? $this->object,
@@ -193,6 +188,11 @@ class Repository implements RepositoryInterface
             static::class,
             $method
         ));
+    }
+
+    protected function newQuery(?string $object = null): Query
+    {
+        return $this->repository($object)->newQuery();
     }
 
     /**
