@@ -27,6 +27,8 @@ class Repository implements RepositoryInterface
 
     protected ?QueryCacheHandler $cacheHandler = null;
 
+    protected string $identifier = 'Id';
+
     public function __construct(
         protected string $object,
     ) {}
@@ -74,6 +76,18 @@ class Repository implements RepositoryInterface
         $this->cacheHandler = $handler;
 
         return $this;
+    }
+
+    public function setIdentifier(string $identifier): static
+    {
+        $this->identifier = $identifier;
+
+        return $this;
+    }
+
+    public function getIdentifier(): string
+    {
+        return $this->identifier;
     }
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
@@ -156,12 +170,12 @@ class Repository implements RepositoryInterface
 
     protected function repository(?string $object = null): BaseRepository
     {
-        return new BaseRepository(
+        return (new BaseRepository(
             $object ?? $this->object,
             $this->defaultConstraints,
             $this->defaultIncludes,
             $this->cacheHandler
-        );
+        ))->setIdentifier($this->identifier);
     }
 
     public function __call(string $method, array $parameters)
