@@ -113,29 +113,78 @@ class Repository
         return $query;
     }
 
-    public function find(string $id, array $options = []): ?Record
+    public function find(string|array $idConditionsOrOptions, array $options = []): ?Record
     {
+        $query = $this->newQuery();
+
+        $id = null;
+        $conditions = [];
+
+        if (is_array($idConditionsOrOptions)) {
+            if ($options === [] && $this->isOptionsArray($idConditionsOrOptions)) {
+                $options = $idConditionsOrOptions;
+            } else {
+                $conditions = $idConditionsOrOptions;
+            }
+        } else {
+            $id = $idConditionsOrOptions;
+        }
+
         $options['select'] = $options['select'] ?? ['FIELDS(ALL)'];
-        $query = $this->newQuery()->where('Id', $id);
-        if ($this->cacheHandler) {
-            $query->setCacheTags([$this->object, $this->object.':'.$id]);
+
+        if ($id !== null) {
+            $query->where('Id', $id);
+
+            if ($this->cacheHandler) {
+                $query->setCacheTags([$this->object, $this->object.':'.$id]);
+            }
+        }
+
+        foreach ($conditions as $field => $value) {
+            $query->where($field, $value);
         }
 
         return $this->applyOptions($query, $options)->first();
     }
 
-    public function first(array $options = []): ?Record
+    public function first(array $conditionsOrOptions = [], array $options = []): ?Record
     {
+        if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
+            $options = $conditionsOrOptions;
+            $conditions = [];
+        } else {
+            $conditions = $conditionsOrOptions;
+        }
+
         $options['select'] = $options['select'] ?? ['FIELDS(ALL)'];
 
-        return $this->applyOptions($this->newQuery(), $options)->first();
+        $query = $this->newQuery();
+
+        foreach ($conditions as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        return $this->applyOptions($query, $options)->first();
     }
 
-    public function get(array $options = []): Collection
+    public function get(array $conditionsOrOptions = [], array $options = []): Collection
     {
+        if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
+            $options = $conditionsOrOptions;
+            $conditions = [];
+        } else {
+            $conditions = $conditionsOrOptions;
+        }
+
         $options['select'] = $options['select'] ?? ['Id'];
 
-        return $this->applyOptions($this->newQuery(), $options)->get();
+        $query = $this->newQuery();
+
+        foreach ($conditions as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        return $this->applyOptions($query, $options)->get();
     }
 
     public function create(array $attributes): array
@@ -207,6 +256,13 @@ class Repository
         $result = $this->create(array_merge($attributes, $values));
 
         return $this->find($result['id']);
+    }
+
+    protected function isOptionsArray(array $data): bool
+    {
+        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset'];
+
+        return (bool) array_intersect(array_keys($data), $optionKeys);
     }
 
     protected function getClient(): Salesforce
