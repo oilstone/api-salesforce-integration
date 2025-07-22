@@ -164,6 +164,21 @@ class Repository implements RepositoryInterface
         );
     }
 
+    public function __call(string $method, array $parameters)
+    {
+        $repository = $this->repository();
+
+        if (method_exists($repository, $method)) {
+            return $repository->{$method}(...$parameters);
+        }
+
+        throw new \BadMethodCallException(sprintf(
+            'Method %s::%s does not exist.',
+            static::class,
+            $method
+        ));
+    }
+
     /**
      * Gets the default fields from the schema, including nested schema properties.
      *

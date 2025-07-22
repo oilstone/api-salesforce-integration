@@ -165,6 +165,50 @@ class Repository
         return $result;
     }
 
+    public function getById(string $id, array $options = []): ?Record
+    {
+        return $this->find($id, $options);
+    }
+
+    public function firstOrCreate(array $attributes, array $extra = []): Record
+    {
+        $query = $this->newQuery();
+
+        foreach ($attributes as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        $record = $this->applyOptions($query, ['select' => ['FIELDS(ALL)']])->first();
+
+        if ($record) {
+            return $record;
+        }
+
+        $result = $this->create(array_merge($attributes, $extra));
+
+        return $this->find($result['id']);
+    }
+
+    public function updateOrCreate(array $attributes, array $values = []): Record
+    {
+        $query = $this->newQuery();
+
+        foreach ($attributes as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        $record = $this->applyOptions($query, ['select' => ['Id']])->first();
+
+        if ($record) {
+            $this->update($record['Id'], $values);
+            return $this->find($record['Id']);
+        }
+
+        $result = $this->create(array_merge($attributes, $values));
+
+        return $this->find($result['id']);
+    }
+
     protected function getClient(): Salesforce
     {
         return $this->client ?? app(Salesforce::class);
