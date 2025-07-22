@@ -11,10 +11,6 @@ class Repository
         protected string $object,
         protected array $defaultConstraints = [],
         protected array $defaultIncludes = [],
-        /**
-         * Default attribute values that are merged with any data passed to
-         * create or update methods.
-         */
         protected array $defaultValues = [],
         protected string $defaultIdentifier = 'Id',
         protected ?QueryCacheHandler $cacheHandler = null,

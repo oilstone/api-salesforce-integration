@@ -4,7 +4,6 @@ namespace Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers;
 
 use Api\Result\Contracts\Record;
 use Api\Schema\Schema;
-use Api\Schema\Property as SchemaProperty;
 use Api\Transformers\Contracts\Transformer as Contract;
 use Carbon\Carbon;
 
