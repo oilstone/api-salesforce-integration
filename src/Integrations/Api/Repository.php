@@ -174,8 +174,9 @@ class Repository implements RepositoryInterface
             $object ?? $this->object,
             $this->defaultConstraints,
             $this->defaultIncludes,
-            $this->cacheHandler
-        ))->setIdentifier($this->identifier);
+            $this->identifier,
+            $this->cacheHandler,
+        ));
     }
 
     public function __call(string $method, array $parameters)
