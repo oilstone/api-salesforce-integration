@@ -13,6 +13,7 @@ use Oilstone\ApiSalesforceIntegration\Collection;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
+use Oilstone\ApiSalesforceIntegration\Record;
 use Psr\Http\Message\ServerRequestInterface;
 
 class Repository implements RepositoryInterface
@@ -163,6 +164,70 @@ class Repository implements RepositoryInterface
         return $record;
     }
 
+    /**
+     * Create a record using the underlying repository after transforming the
+     * provided attributes using the configured transformer.
+     */
+    public function sfCreate(array $attributes): array
+    {
+        $fields = $this->reverseAttributes($attributes);
+
+        $result = $this->repository()->create($fields);
+        $record = $this->repository()->find($result["id"]);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
+    }
+
+    /**
+     * Update a record using the underlying repository after transforming the
+     * provided attributes using the configured transformer.
+     */
+    public function sfUpdate(string $id, array $attributes): array
+    {
+        $fields = $this->reverseAttributes($attributes);
+
+        $this->repository()->update($id, $fields);
+        $record = $this->repository()->find($id);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
+    }
+
+    /**
+     * Proxy the firstOrCreate method on the underlying repository with schema
+     * transformation of the provided values.
+     */
+    public function sfFirstOrCreate(array $attributes, array $extra = []): array
+    {
+        $attrs = $this->reverseAttributes($attributes);
+        $extraFields = $this->reverseAttributes($extra);
+
+        $record = $this->repository()->firstOrCreate($attrs, $extraFields);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
+    }
+
+    /**
+     * Proxy the updateOrCreate method on the underlying repository with schema
+     * transformation of the provided values.
+     */
+    public function sfUpdateOrCreate(array $attributes, array $values = []): array
+    {
+        $attrs = $this->reverseAttributes($attributes);
+        $valueFields = $this->reverseAttributes($values);
+
+        $record = $this->repository()->updateOrCreate($attrs, $valueFields);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
+    }
+
     public function repository(?string $object = null): BaseRepository
     {
         return new BaseRepository(
@@ -188,6 +253,18 @@ class Repository implements RepositoryInterface
             static::class,
             $method
         ));
+    }
+
+    /**
+     * Reverse transform only the provided attributes.
+     */
+    protected function reverseAttributes(array $attributes): array
+    {
+        if ($this->transformer) {
+            $attributes = $this->transformer->reverse($attributes);
+        }
+
+        return array_filter($attributes, fn ($value) => isset($value));
     }
 
     protected function newQuery(?string $object = null): Query
