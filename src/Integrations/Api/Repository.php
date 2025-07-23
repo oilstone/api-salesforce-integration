@@ -170,13 +170,14 @@ class Repository implements RepositoryInterface
      */
     public function sfCreate(array $attributes): array
     {
-        $fields = $this->transformer
-            ? $this->transformer->reverse($attributes)
-            : $attributes;
+        $fields = $this->reverseAttributes($attributes);
 
-        $fields = array_filter($fields, fn ($value) => isset($value));
+        $result = $this->repository()->create($fields);
+        $record = $this->repository()->find($result["id"]);
 
-        return $this->repository()->create($fields);
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
     }
 
     /**
@@ -185,43 +186,46 @@ class Repository implements RepositoryInterface
      */
     public function sfUpdate(string $id, array $attributes): array
     {
-        $fields = $this->transformer
-            ? $this->transformer->reverse($attributes)
-            : $attributes;
+        $fields = $this->reverseAttributes($attributes);
 
-        return $this->repository()->update($id, $fields);
+        $this->repository()->update($id, $fields);
+        $record = $this->repository()->find($id);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
     }
 
     /**
      * Proxy the firstOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function sfFirstOrCreate(array $attributes, array $extra = []): Record
+    public function sfFirstOrCreate(array $attributes, array $extra = []): array
     {
-        $attrs = $this->transformer
-            ? $this->transformer->reverse($attributes)
-            : $attributes;
-        $extraFields = $this->transformer
-            ? $this->transformer->reverse($extra)
-            : $extra;
+        $attrs = $this->reverseAttributes($attributes);
+        $extraFields = $this->reverseAttributes($extra);
 
-        return $this->repository()->firstOrCreate($attrs, $extraFields);
+        $record = $this->repository()->firstOrCreate($attrs, $extraFields);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
     }
 
     /**
      * Proxy the updateOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function sfUpdateOrCreate(array $attributes, array $values = []): Record
+    public function sfUpdateOrCreate(array $attributes, array $values = []): array
     {
-        $attrs = $this->transformer
-            ? $this->transformer->reverse($attributes)
-            : $attributes;
-        $valueFields = $this->transformer
-            ? $this->transformer->reverse($values)
-            : $values;
+        $attrs = $this->reverseAttributes($attributes);
+        $valueFields = $this->reverseAttributes($values);
 
-        return $this->repository()->updateOrCreate($attrs, $valueFields);
+        $record = $this->repository()->updateOrCreate($attrs, $valueFields);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
     }
 
     public function repository(?string $object = null): BaseRepository
@@ -249,6 +253,30 @@ class Repository implements RepositoryInterface
             static::class,
             $method
         ));
+    }
+
+    /**
+     * Reverse transform only the provided attributes.
+     */
+    protected function reverseAttributes(array $attributes): array
+    {
+        if ($this->transformer) {
+            $attributes = $this->transformer->reverse($attributes);
+        }
+
+        return array_filter($attributes, fn ($value) => isset($value));
+    }
+
+    /**
+     * Reverse transform only the provided attributes.
+     */
+    protected function reverseAttributes(array $attributes): array
+    {
+        if ($this->transformer) {
+            $attributes = $this->transformer->reverse($attributes);
+        }
+
+        return array_filter($attributes, fn ($value) => isset($value));
     }
 
     protected function newQuery(?string $object = null): Query
