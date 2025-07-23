@@ -93,10 +93,9 @@ class Repository implements RepositoryInterface
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
     {
-        return $this->repository()->find(
-            $pipe->getKey(),
-            ['select' => $this->getDefaultFields()]
-        );
+        $result = $this->sfFind($pipe->getKey());
+
+        return $result ? Record::make($result) : null;
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
@@ -131,28 +130,18 @@ class Repository implements RepositoryInterface
     {
         $object = $request->getQueryParams()['object'] ?? null;
 
-        $fields = $pipe->getResource()->getTransformer()->reverse(
-            $request->getParsedBody()->toArray()
-        );
+        $result = $this->sfCreate($request->getParsedBody()->toArray(), $object);
 
-        $fields = array_filter($fields, fn($value) => isset($value));
-
-        $result = $this->repository($object)->create($fields);
-
-        return $this->repository($object)->find($result['id']);
+        return Record::make($result);
     }
 
     public function update(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
     {
         $object = $request->getQueryParams()['object'] ?? null;
 
-        $fields = $pipe->getResource()->getTransformer()->reverse(
-            $request->getParsedBody()->toArray()
-        );
+        $result = $this->sfUpdate($pipe->getKey(), $request->getParsedBody()->toArray(), $object);
 
-        $this->repository($object)->update($pipe->getKey(), $fields);
-
-        return $this->getByKey($pipe);
+        return Record::make($result);
     }
 
     public function delete(Pipe $pipe): ResultRecordInterface
@@ -168,12 +157,12 @@ class Repository implements RepositoryInterface
      * Create a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
-    public function sfCreate(array $attributes): array
+    public function sfCreate(array $attributes, ?string $object = null): array
     {
         $fields = $this->reverseAttributes($attributes);
 
-        $result = $this->repository()->create($fields);
-        $record = $this->repository()->find($result["id"]);
+        $result = $this->repository($object)->create($fields);
+        $record = $this->repository($object)->find($result["id"], ['select' => $this->getDefaultFields()]);
 
         return $this->transformer
             ? $this->transformer->transform($record)
@@ -184,12 +173,12 @@ class Repository implements RepositoryInterface
      * Update a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
-    public function sfUpdate(string $id, array $attributes): array
+    public function sfUpdate(string $id, array $attributes, ?string $object = null): array
     {
         $fields = $this->reverseAttributes($attributes);
 
-        $this->repository()->update($id, $fields);
-        $record = $this->repository()->find($id);
+        $this->repository($object)->update($id, $fields);
+        $record = $this->repository($object)->find($id, ['select' => $this->getDefaultFields()]);
 
         return $this->transformer
             ? $this->transformer->transform($record)
@@ -200,12 +189,13 @@ class Repository implements RepositoryInterface
      * Proxy the firstOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function sfFirstOrCreate(array $attributes, array $extra = []): array
+    public function sfFirstOrCreate(array $attributes, array $extra = [], ?string $object = null): array
     {
         $attrs = $this->reverseAttributes($attributes);
         $extraFields = $this->reverseAttributes($extra);
 
-        $record = $this->repository()->firstOrCreate($attrs, $extraFields);
+        $record = $this->repository($object)->firstOrCreate($attrs, $extraFields);
+        $record = $this->repository($object)->find($record[$this->identifier], ['select' => $this->getDefaultFields()]);
 
         return $this->transformer
             ? $this->transformer->transform($record)
@@ -216,12 +206,13 @@ class Repository implements RepositoryInterface
      * Proxy the updateOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function sfUpdateOrCreate(array $attributes, array $values = []): array
+    public function sfUpdateOrCreate(array $attributes, array $values = [], ?string $object = null): array
     {
         $attrs = $this->reverseAttributes($attributes);
         $valueFields = $this->reverseAttributes($values);
 
-        $record = $this->repository()->updateOrCreate($attrs, $valueFields);
+        $record = $this->repository($object)->updateOrCreate($attrs, $valueFields);
+        $record = $this->repository($object)->find($record[$this->identifier], ['select' => $this->getDefaultFields()]);
 
         return $this->transformer
             ? $this->transformer->transform($record)
@@ -234,6 +225,8 @@ class Repository implements RepositoryInterface
      */
     public function sfGet(array $conditionsOrOptions = [], array $options = []): array
     {
+        $options['select'] = $options['select'] ?? $this->getDefaultFields();
+
         $collection = $this->repository()->get($conditionsOrOptions, $options);
 
         return array_map(function (Record $record) {
@@ -249,6 +242,8 @@ class Repository implements RepositoryInterface
      */
     public function sfFind(string|array $idConditionsOrOptions, array $options = []): ?array
     {
+        $options['select'] = $options['select'] ?? $this->getDefaultFields();
+
         $record = $this->repository()->find($idConditionsOrOptions, $options);
 
         if (! $record) {
@@ -266,6 +261,8 @@ class Repository implements RepositoryInterface
      */
     public function sfFirst(array $conditionsOrOptions = [], array $options = []): ?array
     {
+        $options['select'] = $options['select'] ?? $this->getDefaultFields();
+
         $record = $this->repository()->first($conditionsOrOptions, $options);
 
         if (! $record) {
