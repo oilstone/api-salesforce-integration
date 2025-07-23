@@ -41,13 +41,10 @@ class ServiceProvider extends BaseServiceProvider
                 return $data['access_token'] ?? null;
             });
 
-            $logger = null;
+            $queryCacheHandler = $this->app->make(QueryCacheHandler::class);
+            $logger = ! empty($config['debug']) ? Log::channel() : null;
 
-            if (! empty($config['debug'])) {
-                $logger = Log::channel();
-            }
-
-            return new Salesforce($client, $config['instance_url'], $token, $config['instance_version'], $logger);
+            return new Salesforce($client, $config['instance_url'], $token, $config['instance_version'], $logger, $queryCacheHandler);
         });
     }
 

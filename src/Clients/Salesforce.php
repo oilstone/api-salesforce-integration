@@ -4,7 +4,6 @@ namespace Oilstone\ApiSalesforceIntegration\Clients;
 
 use GuzzleHttp\Client;
 use Psr\Log\LoggerInterface;
-use Psr\Http\Message\ResponseInterface;
 use Oilstone\ApiSalesforceIntegration\Exceptions\SalesforceException;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 
@@ -21,22 +20,16 @@ class Salesforce
     protected ?LoggerInterface $logger = null;
 
 
-    protected ?\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $cacheHandler = null;
+    protected ?QueryCacheHandler $cacheHandler = null;
 
-    public function __construct(Client $httpClient, string $instanceUrl, string $accessToken, string $instanceVersion = 'v52.0', ?LoggerInterface $logger = null)
+    public function __construct(Client $httpClient, string $instanceUrl, string $accessToken, string $instanceVersion = 'v52.0', ?LoggerInterface $logger = null, ?QueryCacheHandler $cacheHandler = null)
     {
         $this->httpClient = $httpClient;
         $this->instanceUrl = rtrim($instanceUrl, '/');
         $this->accessToken = $accessToken;
         $this->instanceVersion = $instanceVersion;
         $this->logger = $logger;
-    }
-
-    public function setCacheHandler(QueryCacheHandler $handler): static
-    {
-        $this->cacheHandler = $handler;
-
-        return $this;
+        $this->cacheHandler = $cacheHandler;
     }
 
     protected function log(string $method, string $url, array $context, array $response, int $status): void
@@ -60,8 +53,6 @@ class Salesforce
                 'Authorization' => 'Bearer '.$this->accessToken,
                 'Accept' => 'application/json',
             ],
-            // Prevent Guzzle from throwing exceptions so we can log errors
-            // and convert them to SalesforceException consistently.
             'http_errors' => false,
         ], $options));
 
@@ -98,7 +89,12 @@ class Salesforce
 
     public function picklistValues(string $object, string $recordTypeId, string $field): array
     {
-        $data = $this->request('GET', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/ui-api/object-info/'.trim($object, '/').'/picklist-values/'.trim($recordTypeId, '/').'/'.trim($field, '/'));
+        $callback = fn () => $this->request(
+            'GET',
+            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/ui-api/object-info/'.trim($object, '/').'/picklist-values/'.trim($recordTypeId, '/').'/'.trim($field, '/')
+        );
+
+        $data = $this->cacheHandler ? $this->cacheHandler->remember('PICKLIST_VALUES '.$object.'_'.$recordTypeId.'_'.$field, $callback, [$object, $recordTypeId, $field]) : $callback();
 
         return array_values(array_map(
             fn ($v) => html_entity_decode($v['value'], ENT_QUOTES | ENT_HTML5),
