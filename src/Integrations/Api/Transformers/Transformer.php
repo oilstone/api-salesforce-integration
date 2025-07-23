@@ -82,6 +82,10 @@ class Transformer implements Contract
                 }
             }
 
+            if ($property->hasMeta('delimited') && $value !== null && ! is_array($value)) {
+                $value = $value === '' ? [] : explode($property->delimited, (string) $value);
+            }
+
             if ($property->hasMeta('isYesNo')) {
                 $value = $value !== null ? strtolower((string) $value) === 'yes' : null;
             }
@@ -164,6 +168,10 @@ class Transformer implements Contract
                         }, $value)));
                         break;
                 }
+            }
+
+            if ($property->hasMeta('delimited') && is_array($value)) {
+                $value = implode($property->delimited, $value);
             }
 
             $path = explode('.', $key);
