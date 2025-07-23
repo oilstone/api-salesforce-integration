@@ -49,6 +49,9 @@ class Salesforce
                 'Authorization' => 'Bearer '.$this->accessToken,
                 'Accept' => 'application/json',
             ],
+            // Prevent Guzzle from throwing exceptions so we can log errors
+            // and convert them to SalesforceException consistently.
+            'http_errors' => false,
         ], $options));
 
         $body = (string) $response->getBody();
