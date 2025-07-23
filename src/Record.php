@@ -11,7 +11,6 @@ class Record extends Map implements ApiRecordContract
 {
     protected iterable $meta = [];
 
-    protected static array $descriptions = [];
 
     protected static ?Salesforce $client = null;
 
@@ -133,10 +132,6 @@ class Record extends Map implements ApiRecordContract
     {
         $client = self::$client ?? app(Salesforce::class);
 
-        if (! array_key_exists($object, self::$descriptions)) {
-            self::$descriptions[$object] = $client->describe($object);
-        }
-
-        return self::$descriptions[$object];
+        return $client->describe($object);
     }
 }
