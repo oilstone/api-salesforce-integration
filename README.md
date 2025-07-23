@@ -49,6 +49,9 @@ repository's `update` or `delete` methods are used with a configured
 `QueryCacheHandler`. Only the tag for that particular record is flushed so
 cached queries for other records remain intact.
 
+Object descriptions fetched via the client are also cached through the same
+handler, preventing repetitive calls to Salesforce's `describe` endpoint.
+
 ## Basic usage
 
 ### Stand‑alone

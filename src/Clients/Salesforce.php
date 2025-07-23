@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use Psr\Log\LoggerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Oilstone\ApiSalesforceIntegration\Exceptions\SalesforceException;
+use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 
 class Salesforce
 {
@@ -19,6 +20,9 @@ class Salesforce
 
     protected ?LoggerInterface $logger = null;
 
+
+    protected ?\Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler $cacheHandler = null;
+
     public function __construct(Client $httpClient, string $instanceUrl, string $accessToken, string $instanceVersion = 'v52.0', ?LoggerInterface $logger = null)
     {
         $this->httpClient = $httpClient;
@@ -26,6 +30,13 @@ class Salesforce
         $this->accessToken = $accessToken;
         $this->instanceVersion = $instanceVersion;
         $this->logger = $logger;
+    }
+
+    public function setCacheHandler(QueryCacheHandler $handler): static
+    {
+        $this->cacheHandler = $handler;
+
+        return $this;
     }
 
     protected function log(string $method, string $url, array $context, array $response, int $status): void
@@ -73,7 +84,16 @@ class Salesforce
 
     public function describe(string $object): array
     {
-        return $this->request('GET', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/describe');
+        $callback = fn () => $this->request(
+            'GET',
+            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/describe'
+        );
+
+        if ($this->cacheHandler) {
+            return $this->cacheHandler->remember('DESCRIBE '.$object, $callback, [$object]);
+        }
+
+        return $callback();
     }
 
     public function picklistValues(string $object, string $recordTypeId, string $field): array

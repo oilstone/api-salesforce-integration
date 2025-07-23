@@ -20,7 +20,6 @@ class Query
 
     protected array $relationships = [];
 
-    protected static array $descriptions = [];
 
     protected array $conditions = [];
 
@@ -163,11 +162,7 @@ class Query
 
     protected function describe(string $object): array
     {
-        if (! array_key_exists($object, self::$descriptions)) {
-            self::$descriptions[$object] = $this->client->describe($object);
-        }
-
-        return self::$descriptions[$object];
+        return $this->client->describe($object);
     }
 
     public function select(array|string $columns): static
