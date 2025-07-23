@@ -211,11 +211,13 @@ class Repository implements RepositoryInterface
      * Proxy the get method on the underlying repository with optional
      * transformation of the returned records.
      */
-    public function sfGet(array $conditionsOrOptions = [], array $options = [], ?string $object = null): array
+    public function sfGet(array $conditions = [], array $options = [], ?string $object = null): array
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
-        $collection = $this->repository($object)->get($conditionsOrOptions, $options);
+        $conditions = $this->reverseConditions($conditions);
+
+        $collection = $this->repository($object)->get($conditions, $options);
 
         return array_map(function (Record $record) {
             return $this->transformer
@@ -228,11 +230,11 @@ class Repository implements RepositoryInterface
      * Proxy the find method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFind(string|array $idConditionsOrOptions, array $options = [], ?string $object = null): ?array
+    public function sfFind(string $id, array $options = [], ?string $object = null): ?array
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
-        $record = $this->repository($object)->find($idConditionsOrOptions, $options);
+        $record = $this->repository($object)->find($id, $options);
 
         if (! $record) {
             return null;
@@ -247,11 +249,13 @@ class Repository implements RepositoryInterface
      * Proxy the first method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFirst(array $conditionsOrOptions = [], array $options = [], ?string $object = null): ?array
+    public function sfFirst(array $conditions = [], array $options = [], ?string $object = null): ?array
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
-        $record = $this->repository($object)->first($conditionsOrOptions, $options);
+        $conditions = $this->reverseConditions($conditions);
+
+        $record = $this->repository($object)->first($conditions, $options);
 
         if (! $record) {
             return null;
@@ -299,6 +303,14 @@ class Repository implements RepositoryInterface
         }
 
         return array_filter($attributes, fn ($value) => isset($value));
+    }
+
+    /**
+     * Reverse transform conditions using the configured transformer.
+     */
+    protected function reverseConditions(array $conditions): array
+    {
+        return $conditions ? $this->reverseAttributes($conditions) : [];
     }
 
     protected function newQuery(?string $object = null): Query
