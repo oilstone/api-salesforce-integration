@@ -87,7 +87,7 @@ class Resource extends BaseResource
 
     public function constraints(): array
     {
-        return $this->constraints;
+        return [];
     }
 
     public function setConstraints(array $constraints): static
@@ -99,7 +99,7 @@ class Resource extends BaseResource
 
     public function includes(): array
     {
-        return $this->includes;
+        return [];
     }
 
     public function setIncludes(array $includes): static
