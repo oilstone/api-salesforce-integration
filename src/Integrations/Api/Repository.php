@@ -267,18 +267,6 @@ class Repository implements RepositoryInterface
         return array_filter($attributes, fn ($value) => isset($value));
     }
 
-    /**
-     * Reverse transform only the provided attributes.
-     */
-    protected function reverseAttributes(array $attributes): array
-    {
-        if ($this->transformer) {
-            $attributes = $this->transformer->reverse($attributes);
-        }
-
-        return array_filter($attributes, fn ($value) => isset($value));
-    }
-
     protected function newQuery(?string $object = null): Query
     {
         return $this->repository($object)->newQuery();
