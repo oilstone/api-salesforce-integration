@@ -2,6 +2,7 @@
 
 namespace Oilstone\ApiSalesforceIntegration\Cache;
 
+use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
 
 class QueryCacheHandler
@@ -10,13 +11,37 @@ class QueryCacheHandler
 
     public function __construct(
         protected CacheInterface $cache,
-        protected ?int $ttl = null
+        protected ?int $ttl = null,
+        protected ?LoggerInterface $logger = null
     ) {}
+
+    public function setLogger(?LoggerInterface $logger): static
+    {
+        $this->logger = $logger;
+
+        return $this;
+    }
 
     public function setTtl(?int $ttl): static
     {
         $this->ttl = $ttl;
         return $this;
+    }
+
+    protected function log(string $soql, array $response): void
+    {
+        if (! $this->logger) {
+            return;
+        }
+
+        $this->logger->debug('Salesforce request', [
+            'q' => $soql,
+            'method' => 'GET',
+            'url' => 'cache:query',
+            'status' => 200,
+            'response' => $response,
+            'cache' => true,
+        ]);
     }
 
     public function remember(string $soql, callable $callback, array $tags = []): array
@@ -34,6 +59,7 @@ class QueryCacheHandler
         if ($cache->has($key)) {
             $value = $cache->get($key);
             if (is_array($value)) {
+                $this->log($soql, $value);
                 return $value;
             }
         }
