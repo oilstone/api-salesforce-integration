@@ -163,7 +163,7 @@ class Repository implements RepositoryInterface
 
         $result = $this->repository($object)->create($fields);
 
-        return $this->sfFind($result['id'], [], $object);
+        return $this->sfFind($result[$this->identifier], [], $object);
     }
 
     /**
@@ -190,7 +190,7 @@ class Repository implements RepositoryInterface
 
         $record = $this->repository($object)->firstOrCreate($attrs, $extraFields);
 
-        return $this->sfFind($record['id'], [], $object);
+        return $this->sfFind($record[$this->identifier], [], $object);
     }
 
     /**
@@ -204,7 +204,7 @@ class Repository implements RepositoryInterface
 
         $record = $this->repository($object)->updateOrCreate($attrs, $valueFields);
 
-        return $this->sfFind($record['id'], [], $object);
+        return $this->sfFind($record[$this->identifier], [], $object);
     }
 
     /**
