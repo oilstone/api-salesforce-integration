@@ -228,6 +228,55 @@ class Repository implements RepositoryInterface
             : $record->getAttributes();
     }
 
+    /**
+     * Proxy the get method on the underlying repository with optional
+     * transformation of the returned records.
+     */
+    public function sfGet(array $conditionsOrOptions = [], array $options = []): array
+    {
+        $collection = $this->repository()->get($conditionsOrOptions, $options);
+
+        return array_map(function (Record $record) {
+            return $this->transformer
+                ? $this->transformer->transform($record)
+                : $record->getAttributes();
+        }, $collection->getItems());
+    }
+
+    /**
+     * Proxy the find method on the underlying repository with optional
+     * transformation of the returned record.
+     */
+    public function sfFind(string|array $idConditionsOrOptions, array $options = []): ?array
+    {
+        $record = $this->repository()->find($idConditionsOrOptions, $options);
+
+        if (! $record) {
+            return null;
+        }
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
+    }
+
+    /**
+     * Proxy the first method on the underlying repository with optional
+     * transformation of the returned record.
+     */
+    public function sfFirst(array $conditionsOrOptions = [], array $options = []): ?array
+    {
+        $record = $this->repository()->first($conditionsOrOptions, $options);
+
+        if (! $record) {
+            return null;
+        }
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
+    }
+
     public function repository(?string $object = null): BaseRepository
     {
         return new BaseRepository(
