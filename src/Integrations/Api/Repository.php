@@ -93,9 +93,9 @@ class Repository implements RepositoryInterface
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
     {
-        $result = $this->sfFind($pipe->getKey());
+        $result = $this->repository()->find($pipe->getKey());
 
-        return $result ? Record::make($result) : null;
+        return $result ? Record::make($result->toArray()) : null;
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
@@ -130,18 +130,26 @@ class Repository implements RepositoryInterface
     {
         $object = $request->getQueryParams()['object'] ?? null;
 
-        $result = $this->sfCreate($request->getParsedBody()->toArray(), $object);
+        $repository = $this->repository($object);
 
-        return Record::make($result);
+        $result = $repository->create($request->getParsedBody()->toArray());
+
+        $result = $repository->find($result[$this->identifier]);
+
+        return Record::make($result->toArray());
     }
 
     public function update(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
     {
         $object = $request->getQueryParams()['object'] ?? null;
 
-        $result = $this->sfUpdate($pipe->getKey(), $request->getParsedBody()->toArray(), $object);
+        $repository = $this->repository($object);
 
-        return Record::make($result);
+        $result = $repository->update($pipe->getKey(), $this->reverseAttributes($request->getParsedBody()->toArray()));
+
+        $result = $repository->find($result[$this->identifier]);
+
+        return Record::make($result->toArray());
     }
 
     public function delete(Pipe $pipe): ResultRecordInterface

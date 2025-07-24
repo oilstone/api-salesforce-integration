@@ -224,7 +224,9 @@ class Repository
         $payload = array_replace_recursive($this->defaultValues, $attributes);
         $payload = array_filter($payload, fn ($value) => isset($value));
 
-        return $this->getClient()->create($this->object, $payload);
+        $result = $this->getClient()->create($this->object, $payload);
+
+        return array_merge($payload, $result ?? []);
     }
 
     public function update(string $id, array $attributes): array
@@ -238,7 +240,7 @@ class Repository
             $this->cacheHandler->flush([$this->object.':'.$id]);
         }
 
-        return $result;
+        return array_merge($payload, [$this->defaultIdentifier => $id], $result ?? []);
     }
 
     public function delete(string $id): array
