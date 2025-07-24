@@ -35,7 +35,7 @@ If your project uses Laravel you can register the service provider and publish t
 php artisan vendor:publish --tag=config --provider="Oilstone\\ApiSalesforceIntegration\\Integrations\\Laravel\\ServiceProvider"
 ```
 
-Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger.
+Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger. Queries served from the cache are also logged with a `cache` flag so they can be distinguished from live requests.
 
 If the cache store supports tagging, query results are tagged by the Salesforce object name and, for single-record queries such as `find`, `getByKey` or `getRecord`, the record ID. You can clear cached results using the provided Artisan command:
 
