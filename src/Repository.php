@@ -4,6 +4,7 @@ namespace Oilstone\ApiSalesforceIntegration;
 
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
+use Oilstone\ApiSalesforceIntegration\Exceptions\RecordNotFoundException;
 
 class Repository
 {
@@ -179,6 +180,17 @@ class Repository
         return $this->applyOptions($query, $options)->first();
     }
 
+    public function findOrFail(string|array $idConditionsOrOptions, array $options = []): Record
+    {
+        $record = $this->find($idConditionsOrOptions, $options);
+
+        if (! $record) {
+            throw new RecordNotFoundException();
+        }
+
+        return $record;
+    }
+
     public function first(array $conditionsOrOptions = [], array $options = []): ?Record
     {
         if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
@@ -197,6 +209,17 @@ class Repository
         }
 
         return $this->applyOptions($query, $options)->first();
+    }
+
+    public function firstOrFail(array $conditionsOrOptions = [], array $options = []): Record
+    {
+        $record = $this->first($conditionsOrOptions, $options);
+
+        if (! $record) {
+            throw new RecordNotFoundException();
+        }
+
+        return $record;
     }
 
     public function get(array $conditionsOrOptions = [], array $options = []): Collection

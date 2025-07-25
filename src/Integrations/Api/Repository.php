@@ -31,7 +31,7 @@ class Repository implements RepositoryInterface
     protected string $identifier = 'Id';
 
     public function __construct(
-        protected string $object,
+        protected ?string $object = null,
     ) {}
 
     public function getSchema(): ?Schema
@@ -96,6 +96,13 @@ class Repository implements RepositoryInterface
         $result = $this->repository()->find($pipe->getKey());
 
         return $result ? Record::make($result->toArray()) : null;
+    }
+
+    public function getById(string $id): ResultRecordInterface
+    {
+        $result = $this->repository()->findOrFail($id);
+
+        return Record::make($result->toArray());
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
@@ -253,6 +260,17 @@ class Repository implements RepositoryInterface
             : $record->getAttributes();
     }
 
+    public function sfFindOrFail(string $id, array $options = [], ?string $object = null): array
+    {
+        $options['select'] = $options['select'] ?? $this->getDefaultFields();
+
+        $record = $this->repository($object)->findOrFail($id, $options);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
+    }
+
     /**
      * Proxy the first method on the underlying repository with optional
      * transformation of the returned record.
@@ -274,10 +292,29 @@ class Repository implements RepositoryInterface
             : $record->getAttributes();
     }
 
+    public function sfFirstOrFail(array $conditions = [], array $options = [], ?string $object = null): array
+    {
+        $options['select'] = $options['select'] ?? $this->getDefaultFields();
+
+        $conditions = $this->reverseConditions($conditions);
+
+        $record = $this->repository($object)->firstOrFail($conditions, $options);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
+    }
+
     public function repository(?string $object = null): BaseRepository
     {
+        $object ??= $this->object;
+
+        if (! $object) {
+            throw new \Oilstone\ApiSalesforceIntegration\Exceptions\ObjectNotSpecifiedException();
+        }
+
         return new BaseRepository(
-            $object ?? $this->object,
+            $object,
             $this->defaultConstraints,
             $this->defaultIncludes,
             $this->getDefaultValues(),
