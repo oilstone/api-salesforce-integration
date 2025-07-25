@@ -10,7 +10,7 @@ use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 
 class Resource extends BaseResource
 {
-    protected string $object;
+    protected ?string $object = null;
 
     protected array $constraints = [];
 
@@ -73,12 +73,12 @@ class Resource extends BaseResource
         return $repository;
     }
 
-    public function object(): string
+    public function object(): ?string
     {
         return $this->object;
     }
 
-    public function setObject(string $object): static
+    public function setObject(?string $object): static
     {
         $this->object = $object;
 
