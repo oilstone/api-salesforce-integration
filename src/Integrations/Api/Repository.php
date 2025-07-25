@@ -417,6 +417,14 @@ class Repository implements RepositoryInterface
                 $fieldName = $property->alias ?: $property->getName();
                 $fields[] = $prefix . $fieldName;
             }
+
+            if ($property->hasMeta('needs')) {
+                $needs = is_array($property->needs) ? $property->needs : [$property->needs];
+
+                foreach ($needs as $need) {
+                    $fields[] = $prefix . $need;
+                }
+            }
         }
 
         return $fields;
