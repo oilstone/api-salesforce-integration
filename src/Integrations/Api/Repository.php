@@ -400,6 +400,14 @@ class Repository implements RepositoryInterface
         }
 
         foreach ($schema->getProperties() as $property) {
+            if ($property->hasMeta('needs')) {
+                $needs = is_array($property->needs) ? $property->needs : [$property->needs];
+
+                foreach ($needs as $need) {
+                    $fields[] = $prefix . $need;
+                }
+            }
+
             if ($property->hasMeta('validationOnly') || $property->hasMeta('calculated') || $property->hasMeta('isRelation')) {
                 continue;
             }
@@ -416,14 +424,6 @@ class Repository implements RepositoryInterface
             } else {
                 $fieldName = $property->alias ?: $property->getName();
                 $fields[] = $prefix . $fieldName;
-            }
-
-            if ($property->hasMeta('needs')) {
-                $needs = is_array($property->needs) ? $property->needs : [$property->needs];
-
-                foreach ($needs as $need) {
-                    $fields[] = $prefix . $need;
-                }
             }
         }
 
