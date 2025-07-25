@@ -400,7 +400,7 @@ class Repository implements RepositoryInterface
         }
 
         foreach ($schema->getProperties() as $property) {
-            if ($property->hasMeta('validationOnly') || $property->hasMeta('isRelation')) {
+            if ($property->hasMeta('validationOnly') || $property->hasMeta('calculated') || $property->hasMeta('isRelation')) {
                 continue;
             }
 
@@ -438,7 +438,7 @@ class Repository implements RepositoryInterface
         $defaults = [];
 
         foreach ($schema->getProperties() as $property) {
-            if ($property->hasMeta('readonly') || $property->hasMeta('validationOnly') || $property->hasMeta('isRelation')) {
+            if ($property->hasMeta('readonly') || $property->hasMeta('calculated') || $property->hasMeta('validationOnly') || $property->hasMeta('isRelation')) {
                 continue;
             }
 

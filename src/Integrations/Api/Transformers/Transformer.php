@@ -123,7 +123,7 @@ class Transformer implements Contract
         $addressLines = [];
 
         foreach ($schema->getProperties() as $property) {
-            if ($property->hasMeta('readonly') || $property->hasMeta('validationOnly') || $property->hasMeta('isRelation')) {
+            if ($property->hasMeta('readonly') || $property->hasMeta('calculated') || $property->hasMeta('validationOnly') || $property->hasMeta('isRelation')) {
                 continue;
             }
 
