@@ -63,6 +63,10 @@ class Transformer implements Contract
 
             $value = $currentAttributes[$path[0]] ?? null;
 
+            if ($property->hasMeta('beforeTransform') && is_callable($property->beforeTransform)) {
+                $value = ($property->beforeTransform)($value, $attributes);
+            }
+
             if ($value) {
                 switch ($property->getType()) {
                     case 'date':
@@ -96,7 +100,15 @@ class Transformer implements Contract
 
                 $transformed[$property->getName()] = ($lines[$line - 1] ?? null) ?: null;
 
+                if ($property->hasMeta('afterTransform') && is_callable($property->afterTransform)) {
+                    $transformed[$property->getName()] = ($property->afterTransform)($transformed[$property->getName()], $attributes);
+                }
+
                 continue;
+            }
+
+            if ($property->hasMeta('afterTransform') && is_callable($property->afterTransform)) {
+                $value = ($property->afterTransform)($value, $attributes);
             }
 
             $transformed[$property->getName()] = $value;
@@ -131,9 +143,17 @@ class Transformer implements Contract
                 $line = (int) $property->isAddressLine;
                 $lineValue = $attributes[$property->getName()] ?? null;
 
+                if ($property->hasMeta('beforeReverse') && is_callable($property->beforeReverse)) {
+                    $lineValue = ($property->beforeReverse)($lineValue, $attributes);
+                }
+
                 if ($lineValue === null && array_key_exists($key, $attributes)) {
                     $lines = preg_split('/\r\n|\n|\r/', (string) $attributes[$key]);
                     $lineValue = $lines[$line - 1] ?? null;
+                }
+
+                if ($property->hasMeta('afterReverse') && is_callable($property->afterReverse)) {
+                    $lineValue = ($property->afterReverse)($lineValue, $attributes);
                 }
 
                 if (! isset($addressLines[$key])) {
@@ -146,6 +166,10 @@ class Transformer implements Contract
             }
 
             $value = $attributes[$property->getName()] ?? null;
+
+            if ($property->hasMeta('beforeReverse') && is_callable($property->beforeReverse)) {
+                $value = ($property->beforeReverse)($value, $attributes);
+            }
 
             if ($property->hasMeta('isYesNo') && $value !== null) {
                 $value = $value ? 'Yes' : 'No';
@@ -172,6 +196,10 @@ class Transformer implements Contract
 
             if ($property->hasMeta('delimited') && is_array($value)) {
                 $value = implode($property->delimited, $value);
+            }
+
+            if ($property->hasMeta('afterReverse') && is_callable($property->afterReverse)) {
+                $value = ($property->afterReverse)($value, $attributes);
             }
 
             $path = explode('.', $key);
