@@ -136,27 +136,26 @@ class Repository implements RepositoryInterface
     public function create(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
     {
         $object = $request->getQueryParams()['object'] ?? null;
-
         $repository = $this->repository($object);
 
-        $result = $repository->create($request->getParsedBody()->toArray());
+        $fields = $this->reverseAttributes($request->getParsedBody()->toArray());
 
-        $result = $repository->find($result[$this->identifier]);
+        $result = $repository->create($fields);
 
-        return Record::make($result->toArray());
+        return Record::make($repository->findOrFail($result['id'])->toArray());
     }
 
     public function update(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
     {
         $object = $request->getQueryParams()['object'] ?? null;
-
         $repository = $this->repository($object);
+        $id = $pipe->getKey();
 
-        $result = $repository->update($pipe->getKey(), $this->reverseAttributes($request->getParsedBody()->toArray()));
+        $fields = $this->reverseAttributes($request->getParsedBody()->toArray());
 
-        $result = $repository->find($result[$this->identifier]);
+        $this->repository($object)->update($id, $fields);
 
-        return Record::make($result->toArray());
+        return Record::make($repository->findOrFail($id)->toArray());
     }
 
     public function delete(Pipe $pipe): ResultRecordInterface
@@ -178,7 +177,7 @@ class Repository implements RepositoryInterface
 
         $result = $this->repository($object)->create($fields);
 
-        return $this->sfFind($result[$this->identifier], [], $object);
+        return $this->sfFind($result['id'], [], $object);
     }
 
     /**
