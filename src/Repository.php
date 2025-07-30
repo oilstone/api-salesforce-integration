@@ -356,7 +356,7 @@ class Repository
                 continue;
             }
 
-            if ($value === null && ! $attributeExists) {
+            if (($value === null || $value === '') && ! $attributeExists) {
                 unset($payload[$key]);
             }
         }

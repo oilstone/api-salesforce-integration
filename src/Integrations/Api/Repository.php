@@ -343,7 +343,19 @@ class Repository implements RepositoryInterface
     protected function reverseAttributes(array $attributes, bool $allowNull = false): array
     {
         if ($this->transformer) {
-            $attributes = $this->transformer->reverse($attributes);
+            $transformed = $this->transformer->reverse($attributes);
+
+            $known = [];
+
+            if ($this->schema) {
+                foreach ($this->schema->getProperties() as $property) {
+                    $known[] = $property->getName();
+                }
+            }
+
+            $unknown = array_diff_key($attributes, array_flip($known));
+
+            $attributes = array_replace($unknown, $transformed);
         }
 
         return $allowNull ? $attributes : array_filter($attributes, fn ($value) => isset($value));
