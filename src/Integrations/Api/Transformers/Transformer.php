@@ -67,6 +67,10 @@ class Transformer implements Contract
                 $value = ($property->beforeTransform)($value, $attributes);
             }
 
+            if ($property->hasMeta('fixed')) {
+                $value = $property->fixed;
+            }
+
             if ($value) {
                 switch ($property->getType()) {
                     case 'date':
@@ -152,6 +156,10 @@ class Transformer implements Contract
                     $lineValue = $lines[$line - 1] ?? null;
                 }
 
+                if ($property->hasMeta('fixed')) {
+                    $lineValue = $property->fixed;
+                }
+
                 if ($property->hasMeta('afterReverse') && is_callable($property->afterReverse)) {
                     $lineValue = ($property->afterReverse)($lineValue, $attributes);
                 }
@@ -169,6 +177,10 @@ class Transformer implements Contract
 
             if ($property->hasMeta('beforeReverse') && is_callable($property->beforeReverse)) {
                 $value = ($property->beforeReverse)($value, $attributes);
+            }
+
+            if ($property->hasMeta('fixed')) {
+                $value = $property->fixed;
             }
 
             if ($property->hasMeta('isYesNo') && $value !== null) {
