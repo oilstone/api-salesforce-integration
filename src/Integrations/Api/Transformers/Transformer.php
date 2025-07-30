@@ -18,9 +18,9 @@ class Transformer implements Contract
         return $this->transformSchema($this->schema, $record->getAttributes());
     }
 
-    public function reverse(array $attributes): array
+    public function reverse(array $attributes, bool $ignoreFixed = false): array
     {
-        return $this->reverseSchema($this->schema, $attributes);
+        return $this->reverseSchema($this->schema, $attributes, $ignoreFixed);
     }
 
     public function transformMetaData(Record $record): array
@@ -67,7 +67,7 @@ class Transformer implements Contract
                 $value = ($property->beforeTransform)($value, $attributes);
             }
 
-            if ($property->hasMeta('fixed')) {
+            if ($property->hasMeta('fixed') && ! $ignoreFixed) {
                 $value = $property->fixed;
             }
 
@@ -121,7 +121,7 @@ class Transformer implements Contract
         return $transformed;
     }
 
-    protected function reverseSchema(Schema $schema, array $attributes): array
+    protected function reverseSchema(Schema $schema, array $attributes, bool $ignoreFixed = false): array
     {
         $reversed = [];
         $addressLines = [];
@@ -131,11 +131,17 @@ class Transformer implements Contract
                 continue;
             }
 
+            $provided = array_key_exists($property->getName(), $attributes) || ($property->alias && array_key_exists($property->alias, $attributes));
+
+            if ($ignoreFixed && ! $provided && $property->hasMeta('fixed')) {
+                continue;
+            }
+
             if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
                 $value = $attributes[$property->getName()] ?? [];
 
                 if (is_array($value)) {
-                    $reversed = array_replace_recursive($reversed, $this->reverseSchema($property->getAccepts(), $value));
+                    $reversed = array_replace_recursive($reversed, $this->reverseSchema($property->getAccepts(), $value, $ignoreFixed));
                 }
 
                 continue;
@@ -156,7 +162,7 @@ class Transformer implements Contract
                     $lineValue = $lines[$line - 1] ?? null;
                 }
 
-                if ($property->hasMeta('fixed')) {
+                if ($property->hasMeta('fixed') && ! $ignoreFixed) {
                     $lineValue = $property->fixed;
                 }
 
@@ -179,7 +185,7 @@ class Transformer implements Contract
                 $value = ($property->beforeReverse)($value, $attributes);
             }
 
-            if ($property->hasMeta('fixed')) {
+            if ($property->hasMeta('fixed') && ! $ignoreFixed) {
                 $value = $property->fixed;
             }
 
@@ -199,8 +205,8 @@ class Transformer implements Contract
                         break;
 
                     case 'collection':
-                        $value = array_values(array_filter(array_map(function ($item) use ($property) {
-                            return $item ? $this->reverseSchema($property->getAccepts(), $item) : null;
+                        $value = array_values(array_filter(array_map(function ($item) use ($property, $ignoreFixed) {
+                            return $item ? $this->reverseSchema($property->getAccepts(), $item, $ignoreFixed) : null;
                         }, $value)));
                         break;
                 }
