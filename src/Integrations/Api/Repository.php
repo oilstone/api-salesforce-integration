@@ -457,8 +457,8 @@ class Repository implements RepositoryInterface
                 continue;
             }
 
-            if ($property->hasMeta('default')) {
-                $value = $property->default;
+            if ($property->hasMeta('default') || $property->hasMeta('fixed')) {
+                $value = $property->hasMeta('fixed') ? $property->fixed : $property->default;
 
                 if ($property->hasMeta('isYesNo') && $value !== null) {
                     $value = $value ? 'Yes' : 'No';
