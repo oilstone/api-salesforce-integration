@@ -138,7 +138,7 @@ class Repository implements RepositoryInterface
         $object = $request->getQueryParams()['object'] ?? null;
         $repository = $this->repository($object);
 
-        $fields = $this->reverseAttributes($request->getParsedBody()->toArray());
+        $fields = $this->reverseAttributes($request->getParsedBody()->toArray(), true);
 
         $result = $repository->create($fields);
 
@@ -151,7 +151,7 @@ class Repository implements RepositoryInterface
         $repository = $this->repository($object);
         $id = $pipe->getKey();
 
-        $fields = $this->reverseAttributes($request->getParsedBody()->toArray());
+        $fields = $this->reverseAttributes($request->getParsedBody()->toArray(), true);
 
         $this->repository($object)->update($id, $fields);
 
@@ -173,7 +173,7 @@ class Repository implements RepositoryInterface
      */
     public function sfCreate(array $attributes, ?string $object = null): array
     {
-        $fields = $this->reverseAttributes($attributes);
+        $fields = $this->reverseAttributes($attributes, true);
 
         $result = $this->repository($object)->create($fields);
 
@@ -186,7 +186,7 @@ class Repository implements RepositoryInterface
      */
     public function sfUpdate(string $id, array $attributes, ?string $object = null): array
     {
-        $fields = $this->reverseAttributes($attributes);
+        $fields = $this->reverseAttributes($attributes, true);
 
         $this->repository($object)->update($id, $fields);
 
@@ -199,8 +199,8 @@ class Repository implements RepositoryInterface
      */
     public function sfFirstOrCreate(array $attributes, array $extra = [], ?string $object = null): array
     {
-        $attrs = $this->reverseAttributes($attributes);
-        $extraFields = $this->reverseAttributes($extra);
+        $attrs = $this->reverseAttributes($attributes, true);
+        $extraFields = $this->reverseAttributes($extra, true);
 
         $record = $this->repository($object)->firstOrCreate($attrs, $extraFields);
 
@@ -213,8 +213,8 @@ class Repository implements RepositoryInterface
      */
     public function sfUpdateOrCreate(array $attributes, array $values = [], ?string $object = null): array
     {
-        $attrs = $this->reverseAttributes($attributes);
-        $valueFields = $this->reverseAttributes($values);
+        $attrs = $this->reverseAttributes($attributes, true);
+        $valueFields = $this->reverseAttributes($values, true);
 
         $record = $this->repository($object)->updateOrCreate($attrs, $valueFields);
 
@@ -346,7 +346,7 @@ class Repository implements RepositoryInterface
             $attributes = $this->transformer->reverse($attributes);
         }
 
-        return array_filter($attributes, fn ($value) => isset($value));
+        return $allowNull ? $attributes : array_filter($attributes, fn ($value) => isset($value));
     }
 
     /**
