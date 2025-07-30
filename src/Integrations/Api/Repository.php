@@ -352,14 +352,36 @@ class Repository implements RepositoryInterface
                 : array_filter($attributes, static fn ($value) => isset($value));
         }
 
-        $reversed = [];
-
-        foreach ($attributes as $key => $value) {
-            $partial = $this->transformer->reverse([$key => $value]);
-            $reversed = array_replace_recursive($reversed, $partial);
-        }
+        $reversed = $this->transformer->reverse($attributes);
+        $reversed = $this->filterProvided($reversed, $attributes);
 
         return $allowNull ? $reversed : $this->filterUnset($reversed);
+    }
+
+    protected function filterProvided(array $reversed, array $provided): array
+    {
+        foreach ($reversed as $key => $value) {
+            if (! array_key_exists($key, $provided)) {
+                unset($reversed[$key]);
+                continue;
+            }
+
+            if (is_array($value) && is_array($provided[$key])) {
+                if (array_is_list($value) && array_is_list($provided[$key])) {
+                    foreach ($value as $index => $item) {
+                        if (isset($provided[$key][$index]) && is_array($item)) {
+                            $value[$index] = $this->filterProvided($item, $provided[$key][$index]);
+                        }
+                    }
+
+                    $reversed[$key] = $value;
+                } else {
+                    $reversed[$key] = $this->filterProvided($value, $provided[$key]);
+                }
+            }
+        }
+
+        return $reversed;
     }
 
     protected function filterUnset(array $attributes): array
