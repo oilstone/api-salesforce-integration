@@ -346,11 +346,41 @@ class Repository implements RepositoryInterface
      */
     protected function reverseAttributes(array $attributes, bool $allowNull = false): array
     {
-        if ($this->transformer) {
-            $attributes = $this->transformer->reverse($attributes);
+        if (! $this->transformer) {
+            return $allowNull
+                ? $attributes
+                : array_filter($attributes, static fn ($value) => isset($value));
         }
 
-        return $allowNull ? $attributes : array_filter($attributes, fn ($value) => isset($value));
+        $reversed = [];
+
+        foreach ($attributes as $key => $value) {
+            $partial = $this->transformer->reverse([$key => $value]);
+            $reversed = array_replace_recursive($reversed, $partial);
+        }
+
+        return $allowNull ? $reversed : $this->filterUnset($reversed);
+    }
+
+    protected function filterUnset(array $attributes): array
+    {
+        foreach ($attributes as $key => $value) {
+            if (is_array($value)) {
+                $attributes[$key] = $this->filterUnset($value);
+
+                if ($attributes[$key] === []) {
+                    unset($attributes[$key]);
+                }
+
+                continue;
+            }
+
+            if ($value === null) {
+                unset($attributes[$key]);
+            }
+        }
+
+        return $attributes;
     }
 
     /**
