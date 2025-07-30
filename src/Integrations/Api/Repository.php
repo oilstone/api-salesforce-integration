@@ -340,10 +340,10 @@ class Repository implements RepositoryInterface
     /**
      * Reverse transform only the provided attributes.
      */
-    protected function reverseAttributes(array $attributes, bool $allowNull = false): array
+    protected function reverseAttributes(array $attributes, bool $allowNull = false, bool $ignoreFixed = false): array
     {
         if ($this->transformer) {
-            $transformed = $this->transformer->reverse($attributes);
+            $transformed = $this->transformer->reverse($attributes, $ignoreFixed);
 
             $known = [];
 
@@ -366,7 +366,7 @@ class Repository implements RepositoryInterface
      */
     protected function reverseConditions(array $conditions): array
     {
-        return $conditions ? $this->reverseAttributes($conditions) : [];
+        return $conditions ? $this->reverseAttributes($conditions, false, true) : [];
     }
 
     protected function newQuery(?string $object = null): Query
