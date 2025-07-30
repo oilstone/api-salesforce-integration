@@ -3,9 +3,9 @@
 namespace Oilstone\ApiSalesforceIntegration\Clients;
 
 use GuzzleHttp\Client;
-use Psr\Log\LoggerInterface;
-use Oilstone\ApiSalesforceIntegration\Exceptions\SalesforceException;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
+use Oilstone\ApiSalesforceIntegration\Exceptions\SalesforceException;
+use Psr\Log\LoggerInterface;
 
 class Salesforce
 {
@@ -18,7 +18,6 @@ class Salesforce
     protected string $instanceVersion;
 
     protected ?LoggerInterface $logger = null;
-
 
     protected ?QueryCacheHandler $cacheHandler = null;
 
@@ -59,7 +58,9 @@ class Salesforce
         $body = (string) $response->getBody();
         $data = json_decode($body, true);
 
-        $this->log($method, $url, $options['query'] ?? [], $data ?? [], $response->getStatusCode());
+        if ($options['log_request'] ?? false) {
+            $this->log($method, $url, $options, $data ?? [], $response->getStatusCode());
+        }
 
         if ($response->getStatusCode() >= 400) {
             throw SalesforceException::fromResponse($response);
@@ -70,18 +71,21 @@ class Salesforce
 
     public function query(string $soql): array
     {
-        return $this->request('GET', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/query', ['query' => ['q' => $soql]])['records'] ?? [];
+        return $this->request('GET', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/query', ['query' => ['q' => $soql], 'log_request' => true])['records'] ?? [];
     }
 
     public function describe(string $object): array
     {
+        $options = ['log_request' => false];
+
         $callback = fn () => $this->request(
             'GET',
-            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/describe'
+            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/describe',
+            $options,
         );
 
         if ($this->cacheHandler) {
-            return $this->cacheHandler->remember('DESCRIBE '.$object, $callback, [$object]);
+            return $this->cacheHandler->remember('DESCRIBE '.$object, $callback, [$object], $options);
         }
 
         return $callback();
@@ -89,12 +93,15 @@ class Salesforce
 
     public function picklistValues(string $object, string $recordTypeId, string $field): array
     {
+        $options = ['log_request' => false];
+
         $callback = fn () => $this->request(
             'GET',
-            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/ui-api/object-info/'.trim($object, '/').'/picklist-values/'.trim($recordTypeId, '/').'/'.trim($field, '/')
+            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/ui-api/object-info/'.trim($object, '/').'/picklist-values/'.trim($recordTypeId, '/').'/'.trim($field, '/'),
+            $options,
         );
 
-        $data = $this->cacheHandler ? $this->cacheHandler->remember('PICKLIST_VALUES '.$object.'_'.$recordTypeId.'_'.$field, $callback, [$object, $recordTypeId, $field]) : $callback();
+        $data = $this->cacheHandler ? $this->cacheHandler->remember('PICKLIST_VALUES '.$object.'_'.$recordTypeId.'_'.$field, $callback, [$object, $recordTypeId, $field], $options) : $callback();
 
         return array_values(array_map(
             fn ($v) => html_entity_decode($v['value'], ENT_QUOTES | ENT_HTML5),
@@ -106,6 +113,7 @@ class Salesforce
     {
         return $this->request('POST', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/'), [
             'json' => $payload,
+            'log_request' => true,
         ]);
     }
 
@@ -113,11 +121,12 @@ class Salesforce
     {
         return $this->request('PATCH', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/'.trim($id, '/'), [
             'json' => $payload,
+            'log_request' => true,
         ]);
     }
 
     public function delete(string $object, string $id): array
     {
-        return $this->request('DELETE', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/'.trim($id, '/'));
+        return $this->request('DELETE', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/'.trim($id, '/'), ['log_request' => true]);
     }
 }

@@ -283,7 +283,7 @@ class Query
         $callback = fn () => $this->client->query($soql);
 
         $results = $this->cacheHandler
-            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags)
+            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, ['log_request' => true])
             : $callback();
 
         return (new Set)->fill(array_map(

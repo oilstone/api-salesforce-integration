@@ -44,7 +44,7 @@ class QueryCacheHandler
         ]);
     }
 
-    public function remember(string $soql, callable $callback, array $tags = []): array
+    public function remember(string $soql, callable $callback, array $tags = [], array $options = []): array
     {
         $key = $this->prefix.md5($soql);
         $cache = $this->cache;
@@ -59,7 +59,10 @@ class QueryCacheHandler
         if ($cache->has($key)) {
             $value = $cache->get($key);
             if (is_array($value)) {
-                $this->log($soql, $value);
+                if ($options['log_request'] ?? false) {
+                    $this->log($soql, $value);
+                }
+
                 return $value;
             }
         }
