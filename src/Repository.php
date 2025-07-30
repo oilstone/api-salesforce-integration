@@ -245,7 +245,6 @@ class Repository
     public function create(array $attributes): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);
-        $payload = array_filter($payload, fn ($value) => isset($value));
 
         $result = $this->getClient()->create($this->object, $payload);
 
@@ -259,7 +258,6 @@ class Repository
     public function update(string $id, array $attributes): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);
-        $payload = array_filter($payload, fn ($value) => isset($value));
 
         $result = $this->getClient()->update($this->object, $id, $payload);
 

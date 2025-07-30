@@ -343,10 +343,10 @@ class Repository implements RepositoryInterface
     protected function reverseAttributes(array $attributes): array
     {
         if ($this->transformer) {
-            $attributes = $this->transformer->reverse($attributes);
+            return $this->transformer->reverse($attributes);
         }
 
-        return array_filter($attributes, fn ($value) => isset($value));
+        return $attributes;
     }
 
     /**
