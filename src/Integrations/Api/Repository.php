@@ -366,7 +366,7 @@ class Repository implements RepositoryInterface
      */
     protected function reverseConditions(array $conditions): array
     {
-        return $conditions ? $this->reverseAttributes($conditions, false, true) : [];
+        return $conditions ? $this->reverseAttributes($conditions, false) : [];
     }
 
     protected function newQuery(?string $object = null): Query
