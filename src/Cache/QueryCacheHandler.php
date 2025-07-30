@@ -28,7 +28,7 @@ class QueryCacheHandler
         return $this;
     }
 
-    protected function log(string $soql, array $response): void
+    protected function log(string $soql, array $response, array $tags = []): void
     {
         if (! $this->logger) {
             return;
@@ -41,6 +41,7 @@ class QueryCacheHandler
             'status' => 200,
             'response' => $response,
             'cache' => true,
+            'tags' => $tags,
         ]);
     }
 
@@ -60,7 +61,7 @@ class QueryCacheHandler
             $value = $cache->get($key);
             if (is_array($value)) {
                 if ($options['log_request'] ?? false) {
-                    $this->log($soql, $value);
+                    $this->log($soql, $value, $tags);
                 }
 
                 return $value;
@@ -70,6 +71,8 @@ class QueryCacheHandler
         $data = $callback();
 
         $cache->set($key, $data, $this->ttl);
+
+        $this->log('Added to cache: ' . $key, $data, $tags);
 
         return $data;
     }

@@ -249,6 +249,10 @@ class Repository
 
         $result = $this->getClient()->create($this->object, $payload);
 
+        if ($this->cacheHandler) {
+            $this->cacheHandler->flush([$this->object]);
+        }
+
         return array_merge($payload, $result ?? []);
     }
 
