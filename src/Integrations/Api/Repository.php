@@ -199,7 +199,7 @@ class Repository implements RepositoryInterface
      */
     public function sfFirstOrCreate(array $attributes, array $extra = [], ?string $object = null): array
     {
-        $attrs = $this->reverseAttributes($attributes, true);
+        $attrs = $this->reverseAttributes($attributes);
         $extraFields = $this->reverseAttributes($extra, true);
 
         $record = $this->repository($object)->firstOrCreate($attrs, $extraFields);
@@ -213,7 +213,7 @@ class Repository implements RepositoryInterface
      */
     public function sfUpdateOrCreate(array $attributes, array $values = [], ?string $object = null): array
     {
-        $attrs = $this->reverseAttributes($attributes, true);
+        $attrs = $this->reverseAttributes($attributes);
         $valueFields = $this->reverseAttributes($values, true);
 
         $record = $this->repository($object)->updateOrCreate($attrs, $valueFields);
