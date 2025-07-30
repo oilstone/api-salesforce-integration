@@ -340,10 +340,10 @@ class Repository implements RepositoryInterface
     /**
      * Reverse transform only the provided attributes.
      */
-    protected function reverseAttributes(array $attributes, bool $allowNull = false, bool $ignoreFixed = false): array
+    protected function reverseAttributes(array $attributes, bool $allowNull = false): array
     {
         if ($this->transformer) {
-            $transformed = $this->transformer->reverse($attributes, $ignoreFixed);
+            $transformed = $this->transformer->reverse($attributes);
 
             $known = [];
 
