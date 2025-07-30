@@ -245,7 +245,7 @@ class Repository
     public function create(array $attributes): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);
-        $payload = array_filter($payload, fn ($value) => isset($value));
+        $payload = $this->filterNullDefaults($payload, $attributes);
 
         $result = $this->getClient()->create($this->object, $payload);
 
@@ -259,7 +259,7 @@ class Repository
     public function update(string $id, array $attributes): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);
-        $payload = array_filter($payload, fn ($value) => isset($value));
+        $payload = $this->filterNullDefaults($payload, $attributes);
 
         $result = $this->getClient()->update($this->object, $id, $payload);
 
@@ -335,5 +335,32 @@ class Repository
     protected function getClient(): Salesforce
     {
         return $this->client ?? app(Salesforce::class);
+    }
+
+    /**
+     * Remove null values that were not provided in the attributes array.
+     */
+    protected function filterNullDefaults(array $payload, array $attributes): array
+    {
+        foreach ($payload as $key => $value) {
+            $attributeExists = array_key_exists($key, $attributes);
+
+            if (is_array($value)) {
+                $attrValue = $attributeExists && is_array($attributes[$key]) ? $attributes[$key] : [];
+                $payload[$key] = $this->filterNullDefaults($value, $attrValue);
+
+                if ($payload[$key] === [] && ! $attributeExists) {
+                    unset($payload[$key]);
+                }
+
+                continue;
+            }
+
+            if ($value === null && ! $attributeExists) {
+                unset($payload[$key]);
+            }
+        }
+
+        return $payload;
     }
 }
