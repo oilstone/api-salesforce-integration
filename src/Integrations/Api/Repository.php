@@ -362,7 +362,47 @@ class Repository implements RepositoryInterface
      */
     protected function reverseConditions(array $conditions): array
     {
-        return $conditions ? $this->reverseAttributes($conditions, false, false) : [];
+        if (! $conditions) {
+            return [];
+        }
+
+        $reversed = $this->reverseAttributes($conditions, false, false);
+
+        if ($this->schema) {
+            $reversed = $this->stripDefaultValues($reversed, $this->getDefaultValues(), $conditions);
+        }
+
+        return $reversed;
+    }
+
+    /**
+     * Remove any values from the reversed array that were not provided in the
+     * original attributes and merely came from schema defaults or fixed values.
+     */
+    protected function stripDefaultValues(array $reversed, array $defaults, array $provided): array
+    {
+        foreach ($defaults as $key => $value) {
+            if (! array_key_exists($key, $reversed)) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $childProvided = is_array($provided[$key] ?? null) ? $provided[$key] : [];
+                $reversed[$key] = $this->stripDefaultValues($reversed[$key], $value, $childProvided);
+
+                if ($reversed[$key] === []) {
+                    unset($reversed[$key]);
+                }
+
+                continue;
+            }
+
+            if (! array_key_exists($key, $provided)) {
+                unset($reversed[$key]);
+            }
+        }
+
+        return $reversed;
     }
 
     protected function newQuery(?string $object = null): Query
