@@ -199,7 +199,7 @@ class Repository implements RepositoryInterface
      */
     public function sfFirstOrCreate(array $attributes, array $extra = [], ?string $object = null): array
     {
-        $attrs = $this->reverseAttributes($attributes);
+        $attrs = $this->reverseConditions($attributes);
         $extraFields = $this->reverseAttributes($extra, true);
 
         $record = $this->repository($object)->firstOrCreate($attrs, $extraFields);
@@ -215,7 +215,7 @@ class Repository implements RepositoryInterface
      */
     public function sfUpdateOrCreate(array $attributes, array $values = [], ?string $object = null): array
     {
-        $attrs = $this->reverseAttributes($attributes);
+        $attrs = $this->reverseConditions($attributes);
         $valueFields = $this->reverseAttributes($values, true);
 
         $record = $this->repository($object)->updateOrCreate($attrs, $valueFields);
@@ -344,7 +344,7 @@ class Repository implements RepositoryInterface
     /**
      * Reverse transform only the provided attributes.
      */
-    protected function reverseAttributes(array $attributes, bool $allowNull = false): array
+    protected function reverseAttributes(array $attributes, bool $allowNull = false, bool $useDefaults = true): array
     {
         if (! $this->transformer) {
             return $allowNull
@@ -353,56 +353,8 @@ class Repository implements RepositoryInterface
         }
 
         $reversed = $this->transformer->reverse($attributes);
-        $reversed = $this->filterProvided($reversed, $attributes);
 
-        return $allowNull ? $reversed : $this->filterUnset($reversed);
-    }
-
-    protected function filterProvided(array $reversed, array $provided): array
-    {
-        foreach ($reversed as $key => $value) {
-            if (! array_key_exists($key, $provided)) {
-                unset($reversed[$key]);
-                continue;
-            }
-
-            if (is_array($value) && is_array($provided[$key])) {
-                if (array_is_list($value) && array_is_list($provided[$key])) {
-                    foreach ($value as $index => $item) {
-                        if (isset($provided[$key][$index]) && is_array($item)) {
-                            $value[$index] = $this->filterProvided($item, $provided[$key][$index]);
-                        }
-                    }
-
-                    $reversed[$key] = $value;
-                } else {
-                    $reversed[$key] = $this->filterProvided($value, $provided[$key]);
-                }
-            }
-        }
-
-        return $reversed;
-    }
-
-    protected function filterUnset(array $attributes): array
-    {
-        foreach ($attributes as $key => $value) {
-            if (is_array($value)) {
-                $attributes[$key] = $this->filterUnset($value);
-
-                if ($attributes[$key] === []) {
-                    unset($attributes[$key]);
-                }
-
-                continue;
-            }
-
-            if ($value === null) {
-                unset($attributes[$key]);
-            }
-        }
-
-        return $attributes;
+        return $allowNull ? $reversed : array_filter($reversed, fn ($value) => isset($value));
     }
 
     /**
@@ -410,7 +362,7 @@ class Repository implements RepositoryInterface
      */
     protected function reverseConditions(array $conditions): array
     {
-        return $conditions ? $this->reverseAttributes($conditions, false) : [];
+        return $conditions ? $this->reverseAttributes($conditions, false, false) : [];
     }
 
     protected function newQuery(?string $object = null): Query
