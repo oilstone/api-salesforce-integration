@@ -132,16 +132,32 @@ class Transformer implements Contract
             }
 
             if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
-                $value = $attributes[$property->getName()] ?? [];
+                $key = $property->getName();
+
+                if (! array_key_exists($key, $attributes) && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
+                    continue;
+                }
+
+                $value = $attributes[$key] ?? [];
 
                 if (is_array($value)) {
-                    $reversed = array_replace_recursive($reversed, $this->reverseSchema($property->getAccepts(), $value));
+                    $nested = $this->reverseSchema($property->getAccepts(), $value);
+
+                    if ($nested !== []) {
+                        $reversed = array_replace_recursive($reversed, $nested);
+                    }
                 }
 
                 continue;
             }
 
             $key = $property->alias ?: $property->getName();
+
+            $hasValue = array_key_exists($property->getName(), $attributes) || array_key_exists($key, $attributes);
+
+            if (! $hasValue && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
+                continue;
+            }
 
             if ($property->hasMeta('isAddressLine')) {
                 $line = (int) $property->isAddressLine;
@@ -158,6 +174,8 @@ class Transformer implements Contract
 
                 if ($property->hasMeta('fixed')) {
                     $lineValue = $property->fixed;
+                } elseif ($lineValue === null && $property->hasMeta('default')) {
+                    $lineValue = $property->default;
                 }
 
                 if ($property->hasMeta('afterReverse') && is_callable($property->afterReverse)) {
@@ -181,6 +199,8 @@ class Transformer implements Contract
 
             if ($property->hasMeta('fixed')) {
                 $value = $property->fixed;
+            } elseif ($value === null && $property->hasMeta('default')) {
+                $value = $property->default;
             }
 
             if ($property->hasMeta('isYesNo') && $value !== null) {
