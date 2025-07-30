@@ -204,7 +204,9 @@ class Repository implements RepositoryInterface
 
         $record = $this->repository($object)->firstOrCreate($attrs, $extraFields);
 
-        return $this->sfFind($record[$this->identifier], [], $object);
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
     }
 
     /**
@@ -218,7 +220,9 @@ class Repository implements RepositoryInterface
 
         $record = $this->repository($object)->updateOrCreate($attrs, $valueFields);
 
-        return $this->sfFind($record[$this->identifier], [], $object);
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
     }
 
     /**
