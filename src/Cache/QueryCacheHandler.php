@@ -72,7 +72,9 @@ class QueryCacheHandler
 
         $cache->set($key, $data, $this->ttl);
 
-        $this->log('Added to cache: ' . $key, $data, $tags);
+        if ($options['log_request'] ?? false) {
+            $this->log('Added to cache: ' . $key, $data, $tags);
+        }
 
         return $data;
     }
