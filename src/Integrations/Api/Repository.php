@@ -343,8 +343,12 @@ class Repository implements RepositoryInterface
 
     /**
      * Reverse transform only the provided attributes.
+     *
+     * @param array $attributes
+     * @param bool $allowNull When true, `null` values will be retained instead
+     *                        of being filtered out.
      */
-    protected function reverseAttributes(array $attributes, bool $allowNull = false, bool $useDefaults = true): array
+    protected function reverseAttributes(array $attributes, bool $allowNull = false): array
     {
         if (! $this->transformer) {
             return $allowNull
@@ -366,7 +370,7 @@ class Repository implements RepositoryInterface
             return [];
         }
 
-        $reversed = $this->reverseAttributes($conditions, false, false);
+        $reversed = $this->reverseAttributes($conditions, false);
 
         if ($this->schema) {
             $reversed = $this->stripDefaultValues($reversed, $this->getDefaultValues(), $conditions);
