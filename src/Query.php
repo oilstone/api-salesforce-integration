@@ -305,11 +305,15 @@ class Query
     public function count(): int
     {
         $originalSelects = $this->selects;
+        $originalRelationships = $this->relationships;
+
         $this->selects = ['COUNT()'];
+        $this->relationships = [];
 
         $soql = $this->toSoql();
 
         $this->selects = $originalSelects;
+        $this->relationships = $originalRelationships;
 
         $callback = fn () => $this->client->rawQuery($soql);
 
