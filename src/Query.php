@@ -300,6 +300,45 @@ class Query
     }
 
     /**
+     * Execute the query and return the values of a single column.
+     */
+    public function pluck(string $column, ?string $index = null): array
+    {
+        $originalSelects = $this->selects;
+
+        $selects = $this->selects;
+
+        if (! in_array($column, $selects, true)) {
+            $selects[] = $column;
+        }
+
+        if ($index && ! in_array($index, $selects, true)) {
+            $selects[] = $index;
+        }
+
+        $this->select($selects);
+
+        $results = $this->get();
+
+        $this->selects = $originalSelects;
+
+        $values = [];
+
+        foreach ($results as $record) {
+            $value = $record instanceof Record ? $record->get($column) : $record[$column] ?? null;
+
+            if ($index) {
+                $key = $record instanceof Record ? $record->get($index) : $record[$index] ?? null;
+                $values[$key] = $value;
+            } else {
+                $values[] = $value;
+            }
+        }
+
+        return $values;
+    }
+
+    /**
      * Execute the query and return a count of matching records.
      */
     public function count(): int
