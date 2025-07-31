@@ -242,6 +242,38 @@ class Repository
         return $this->applyOptions($query, $options)->get();
     }
 
+    /**
+     * Count the number of records that match the given conditions.
+     */
+    public function count(array $conditionsOrOptions = [], array $options = []): int
+    {
+        if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
+            $options = $conditionsOrOptions;
+            $conditions = [];
+        } else {
+            $conditions = $conditionsOrOptions;
+        }
+
+        $query = $this->newQuery();
+
+        foreach ($conditions as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        foreach ($options['conditions'] ?? [] as $condition) {
+            if (is_callable($condition)) {
+                $condition($query);
+                continue;
+            }
+
+            if (is_array($condition)) {
+                $query->where(...$condition);
+            }
+        }
+
+        return $query->count();
+    }
+
     public function create(array $attributes): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);

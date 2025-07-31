@@ -299,6 +299,27 @@ class Query
         return $result->count() ? $result[0] : null;
     }
 
+    /**
+     * Execute the query and return a count of matching records.
+     */
+    public function count(): int
+    {
+        $originalSelects = $this->selects;
+        $this->selects = ['COUNT()'];
+
+        $soql = $this->toSoql();
+
+        $this->selects = $originalSelects;
+
+        $callback = fn () => $this->client->rawQuery($soql);
+
+        $result = $this->cacheHandler
+            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, ['log_request' => true])
+            : $callback();
+
+        return $result['totalSize'] ?? 0;
+    }
+
     protected function toSoql(): string
     {
         $select = implode(', ', array_merge($this->selects ?: [$this->identifier], $this->relationships));
