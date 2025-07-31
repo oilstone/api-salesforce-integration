@@ -23,6 +23,7 @@ class QueryResolver
         $query->setCacheTags([
             $query->getObject(),
             $query->getObject() . ':' . $this->pipe->getKey(),
+            $query->getObject() . ':findOne',
         ]);
 
         return (new Query($query))

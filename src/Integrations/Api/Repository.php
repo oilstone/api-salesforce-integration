@@ -124,6 +124,7 @@ class Repository implements RepositoryInterface
         $query->setCacheTags([
             $object ?? $this->object,
             ($object ?? $this->object) . ':' . $pipe->getKey(),
+            ($object ?? $this->object) . ':findOne',
         ]);
 
         return (new QueryResolver(
