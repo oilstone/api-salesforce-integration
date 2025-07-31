@@ -82,7 +82,10 @@ class Repository
 
         if ($this->cacheHandler) {
             $query->setCacheHandler($this->cacheHandler);
-            $query->setCacheTags([$object ?? $this->object]);
+            $query->setCacheTags([
+                $object ?? $this->object,
+                ($object ?? $this->object) . ':findMany',
+            ]);
         }
 
         foreach ($this->defaultConstraints as $constraint) {
@@ -169,7 +172,11 @@ class Repository
             $query->where($this->defaultIdentifier, $id);
 
             if ($this->cacheHandler) {
-                $query->setCacheTags([$this->object, $this->object.':'.$id]);
+                $query->setCacheTags([
+                    $this->object,
+                    $this->object.':'.$id,
+                    $this->object.':findOne',
+                ]);
             }
         }
 
@@ -282,7 +289,9 @@ class Repository
         $result = $this->getClient()->create($this->object, $payload);
 
         if ($this->cacheHandler) {
-            $this->cacheHandler->flush([$this->object]);
+            $this->cacheHandler->flush([
+                $this->object . ':findMany',
+            ]);
         }
 
         return array_merge($payload, $result ?? []);
@@ -296,7 +305,10 @@ class Repository
         $result = $this->getClient()->update($this->object, $id, $payload);
 
         if ($this->cacheHandler) {
-            $this->cacheHandler->flush([$this->object.':'.$id]);
+            $this->cacheHandler->flush([
+                $this->object . ':findMany',
+                $this->object . ':' . $id,
+            ]);
         }
 
         return array_merge($payload, [$this->defaultIdentifier => $id], $result ?? []);
@@ -307,7 +319,10 @@ class Repository
         $result = $this->getClient()->delete($this->object, $id);
 
         if ($this->cacheHandler) {
-            $this->cacheHandler->flush([$this->object.':'.$id]);
+            $this->cacheHandler->flush([
+                $this->object . ':findMany',
+                $this->object . ':' . $id,
+            ]);
         }
 
         return $result;

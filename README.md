@@ -37,7 +37,7 @@ php artisan vendor:publish --tag=config --provider="Oilstone\\ApiSalesforceInteg
 
 Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger. Queries served from the cache are also logged with a `cache` flag so they can be distinguished from live requests.
 
-If the cache store supports tagging, query results are tagged by the Salesforce object name and, for single-record queries such as `find`, `getByKey` or `getRecord`, the record ID. You can clear cached results using the provided Artisan command:
+If the cache store supports tagging, query results are tagged by the Salesforce object name. Collection queries receive an additional `<object>:findMany` tag while single-record queries are tagged with `<object>:findOne`. When fetching by ID the record tag `<object>:<id>` is also applied. You can clear cached results using the provided Artisan command:
 
 ```bash
 php artisan salesforce:cache:clear Account
@@ -46,8 +46,9 @@ php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX
 
 Cached results for a specific record are automatically cleared when the
 repository's `update` or `delete` methods are used with a configured
-`QueryCacheHandler`. Only the tag for that particular record is flushed so
-cached queries for other records remain intact.
+`QueryCacheHandler`. The record tag `<object>:<id>` and any list caches tagged
+with `<object>:findMany` are flushed so collection results stay in sync. Newly
+created records trigger only the `<object>:findMany` flush.
 
 Object descriptions fetched via the client are also cached through the same
 handler, preventing repetitive calls to Salesforce's `describe` endpoint.
