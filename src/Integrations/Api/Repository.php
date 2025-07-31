@@ -275,6 +275,16 @@ class Repository implements RepositoryInterface
     }
 
     /**
+     * Proxy the count method on the underlying repository.
+     */
+    public function sfCount(array $conditions = [], array $options = [], ?string $object = null): int
+    {
+        $conditions = $this->reverseConditions($conditions);
+
+        return $this->repository($object)->count($conditions, $options);
+    }
+
+    /**
      * Proxy the first method on the underlying repository with optional
      * transformation of the returned record.
      */

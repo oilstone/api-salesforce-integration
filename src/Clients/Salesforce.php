@@ -69,9 +69,21 @@ class Salesforce
         return $data ?? [];
     }
 
+    /**
+     * Perform a SOQL query and return the raw response.
+     */
+    public function rawQuery(string $soql): array
+    {
+        return $this->request(
+            'GET',
+            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/query',
+            ['query' => ['q' => $soql], 'log_request' => true],
+        );
+    }
+
     public function query(string $soql): array
     {
-        return $this->request('GET', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/query', ['query' => ['q' => $soql], 'log_request' => true])['records'] ?? [];
+        return $this->rawQuery($soql)['records'] ?? [];
     }
 
     public function describe(string $object): array
