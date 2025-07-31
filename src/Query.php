@@ -338,9 +338,7 @@ class Query
             }
 
             if ($condition['type'] === 'in') {
-                $values = array_map(function ($v) {
-                    return is_numeric($v) ? $v : "'".addslashes($v)."'";
-                }, $condition['values']);
+                $values = array_map(fn($v) => $this->formatValue($v), $condition['values']);
 
                 $sql .= sprintf(
                     '%s %s (%s)',
@@ -359,7 +357,7 @@ class Query
                 $value = "'%".addslashes(trim($value, '%'))."%'";
                 $operator = 'LIKE';
             } else {
-                $value = is_numeric($value) ? $value : "'".addslashes($value)."'";
+                $value = $this->formatValue($value);
                 $operator = strtoupper($operator);
             }
 
@@ -367,5 +365,17 @@ class Query
         }
 
         return $sql;
+    }
+
+    /**
+     * Format a value for inclusion in a SOQL query.
+     */
+    protected function formatValue($value): string
+    {
+        if (is_bool($value)) {
+            return $value ? 'TRUE' : 'FALSE';
+        }
+
+        return is_numeric($value) ? (string) $value : "'".addslashes($value)."'";
     }
 }
