@@ -39,7 +39,11 @@ class ServiceProvider extends BaseServiceProvider
 
                 $data = json_decode((string) $response->getBody(), true);
 
-                return $data['access_token'] ?? null;
+                if (! isset($data['access_token'])) {
+                    throw new \RuntimeException('Unable to retrieve Salesforce access token.');
+                }
+
+                return $data['access_token'];
             });
 
             $queryCacheHandler = $this->app->make(QueryCacheHandler::class);
