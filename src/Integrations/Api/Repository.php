@@ -177,7 +177,7 @@ class Repository implements RepositoryInterface
 
         $result = $this->repository($object)->create($fields);
 
-        return $this->sfFind($result['id'], [], $object);
+        return $this->sfFindOrFail($result['id'], [], $object);
     }
 
     /**
@@ -190,7 +190,19 @@ class Repository implements RepositoryInterface
 
         $this->repository($object)->update($id, $fields);
 
-        return $this->sfFind($id, [], $object);
+        return $this->sfFindOrFail($id, [], $object);
+    }
+
+    /**
+     * Delete a record using the underlying repository.
+     */
+    public function sfDelete(string $id, ?string $object = null): array
+    {
+        $record = $this->sfFindOrFail($id, [], $object);
+
+        $this->repository($object)->delete($id);
+
+        return $record;
     }
 
     /**
