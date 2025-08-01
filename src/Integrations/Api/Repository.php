@@ -107,13 +107,7 @@ class Repository implements RepositoryInterface
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
     {
-        return Collection::make(
-            (new QueryResolver(
-                $this->newQuery($request->getQueryParams()['object'] ?? null),
-                $pipe,
-                $this->getDefaultFields(),
-            ))->collection($request)->all()
-        );
+        return (new QueryResolver($this->newQuery($request->getQueryParams()['object'] ?? null), $pipe, $this->getDefaultFields()))->collection($request);
     }
 
     public function getRecord(Pipe $pipe, ServerRequestInterface $request): ?ResultRecordInterface
@@ -127,11 +121,7 @@ class Repository implements RepositoryInterface
             ($object ?? $this->object) . ':findOne',
         ]);
 
-        return (new QueryResolver(
-            $query,
-            $pipe,
-            $this->getDefaultFields(),
-        ))->record($request);
+        return (new QueryResolver($query, $pipe, $this->getDefaultFields()))->record($request);
     }
 
     public function create(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
@@ -152,22 +142,27 @@ class Repository implements RepositoryInterface
     {
         $object = $request->getQueryParams()['object'] ?? null;
         $repository = $this->repository($object);
+
         $id = $pipe->getKey();
 
         $fields = $this->reverseAttributes($request->getParsedBody()->toArray(), true);
 
         $this->repository($object)->update($id, $fields);
 
-        return Record::make($repository->findOrFail($id));
+        $record = $repository->findOrFail($id);
+
+        return Record::make($record);
     }
 
     public function delete(Pipe $pipe): ResultRecordInterface
     {
-        $record = $this->getByKey($pipe);
+        $repository = $this->repository();
 
-        $this->repository()->delete($pipe->getKey());
+        $record = $repository->findOrFail($pipe->getKey());
 
-        return $record;
+        $repository->delete($pipe->getKey());
+
+        return Record::make($record);
     }
 
     /**
@@ -180,9 +175,7 @@ class Repository implements RepositoryInterface
 
         $result = $this->repository($object)->create($fields);
 
-        $record = $this->repository($object)->findOrFail(['Id' => $result['id']], [
-            'select' => $this->getDefaultFields(),
-        ]);
+        $record = $this->repository($object)->findOrFail(['Id' => $result['id']]);
 
         return $this->transformRecord($record);
     }

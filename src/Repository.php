@@ -39,9 +39,6 @@ class Repository
         return $this;
     }
 
-    /**
-     * Set default attribute values.
-     */
     public function setDefaultValues(array $values): static
     {
         $this->defaultValues = $values;
@@ -49,9 +46,6 @@ class Repository
         return $this;
     }
 
-    /**
-     * Retrieve the default attribute values.
-     */
     public function getDefaultValues(): array
     {
         return $this->defaultValues;
@@ -249,9 +243,6 @@ class Repository
         return $this->applyOptions($query, $options)->get();
     }
 
-    /**
-     * Count the number of records that match the given conditions.
-     */
     public function count(array $conditionsOrOptions = [], array $options = []): int
     {
         if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
@@ -384,9 +375,6 @@ class Repository
         return $this->client ?? app(Salesforce::class);
     }
 
-    /**
-     * Remove null values that were not provided in the attributes array.
-     */
     protected function filterNullDefaults(array $payload, array $attributes): array
     {
         foreach ($payload as $key => $value) {

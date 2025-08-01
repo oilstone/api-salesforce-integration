@@ -295,9 +295,6 @@ class Query
         return $result[0] ?? null;
     }
 
-    /**
-     * Execute the query and return the values of a single column.
-     */
     public function pluck(string $column, ?string $index = null): array
     {
         $originalSelects = $this->selects;
@@ -334,9 +331,6 @@ class Query
         return $values;
     }
 
-    /**
-     * Execute the query and return a count of matching records.
-     */
     public function count(): int
     {
         $originalSelects = $this->selects;
@@ -427,9 +421,6 @@ class Query
         return $sql;
     }
 
-    /**
-     * Format a value for inclusion in a SOQL query.
-     */
     protected function formatValue($value): string
     {
         if (is_bool($value)) {
