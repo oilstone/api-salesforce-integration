@@ -181,12 +181,38 @@ class Repository implements RepositoryInterface
     }
 
     /**
+     * Force create a record bypassing readonly and fixed field protections.
+     */
+    public function sfForceCreate(array $attributes, ?string $object = null): array
+    {
+        $fields = $this->reverseAttributes($attributes, true, true);
+
+        $result = $this->repository($object)->create($fields);
+
+        $record = $this->repository($object)->findOrFail(['Id' => $result['id']]);
+
+        return $this->transformRecord($record);
+    }
+
+    /**
      * Update a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
     public function sfUpdate(string $id, array $attributes, ?string $object = null): array
     {
         $fields = $this->reverseAttributes($attributes, true);
+
+        $this->repository($object)->update($id, $fields);
+
+        return $this->sfFindOrFail($id, [], $object);
+    }
+
+    /**
+     * Force update a record bypassing readonly and fixed field protections.
+     */
+    public function sfForceUpdate(string $id, array $attributes, ?string $object = null): array
+    {
+        $fields = $this->reverseAttributes($attributes, true, true);
 
         $this->repository($object)->update($id, $fields);
 
@@ -367,8 +393,9 @@ class Repository implements RepositoryInterface
      * @param array $attributes
      * @param bool $allowNull When true, `null` values will be retained instead
      *                        of being filtered out.
+     * @param bool $force     When true, readonly and fixed field protection is bypassed.
      */
-    protected function reverseAttributes(array $attributes, bool $allowNull = false): array
+    protected function reverseAttributes(array $attributes, bool $allowNull = false, bool $force = false): array
     {
         if (! $this->transformer) {
             return $allowNull
@@ -376,7 +403,9 @@ class Repository implements RepositoryInterface
                 : array_filter($attributes, static fn ($value) => isset($value));
         }
 
-        $reversed = $this->transformer->reverse($attributes);
+        $reversed = $force && method_exists($this->transformer, 'forceReverse')
+            ? $this->transformer->forceReverse($attributes)
+            : $this->transformer->reverse($attributes);
 
         return $allowNull ? $reversed : array_filter($reversed, fn ($value) => isset($value));
     }
