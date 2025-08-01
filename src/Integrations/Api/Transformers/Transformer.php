@@ -23,6 +23,14 @@ class Transformer implements Contract
         return $this->reverseSchema($this->schema, $attributes);
     }
 
+    /**
+     * Reverse the given attributes while bypassing readonly and fixed field protections.
+     */
+    public function forceReverse(array $attributes): array
+    {
+        return $this->reverseSchema($this->schema, $attributes, true);
+    }
+
     public function transformMetaData(Record $record): array
     {
         if (method_exists($record, 'getMetaData')) {
@@ -121,27 +129,32 @@ class Transformer implements Contract
         return $transformed;
     }
 
-    protected function reverseSchema(Schema $schema, array $attributes): array
+    protected function reverseSchema(Schema $schema, array $attributes, bool $force = false): array
     {
         $reversed = [];
         $addressLines = [];
 
         foreach ($schema->getProperties() as $property) {
-            if ($property->hasMeta('readonly') || $property->hasMeta('calculated') || $property->hasMeta('validationOnly') || $property->hasMeta('isRelation')) {
+            if (
+                $property->hasMeta('validationOnly') ||
+                $property->hasMeta('isRelation') ||
+                $property->hasMeta('calculated') ||
+                (!$force && $property->hasMeta('readonly'))
+            ) {
                 continue;
             }
 
             if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
                 $key = $property->getName();
 
-                if (! array_key_exists($key, $attributes) && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
+                if (! array_key_exists($key, $attributes) && ! $force && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
                     continue;
                 }
 
                 $value = $attributes[$key] ?? [];
 
                 if (is_array($value)) {
-                    $nested = $this->reverseSchema($property->getAccepts(), $value);
+                    $nested = $this->reverseSchema($property->getAccepts(), $value, $force);
 
                     if ($nested !== []) {
                         $reversed = array_replace_recursive($reversed, $nested);
@@ -155,7 +168,7 @@ class Transformer implements Contract
 
             $hasValue = array_key_exists($property->getName(), $attributes) || array_key_exists($key, $attributes);
 
-            if (! $hasValue && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
+            if (! $hasValue && ! $force && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
                 continue;
             }
 
@@ -172,7 +185,7 @@ class Transformer implements Contract
                     $lineValue = $lines[$line - 1] ?? null;
                 }
 
-                if ($property->hasMeta('fixed')) {
+                if ($property->hasMeta('fixed') && !($force && $hasValue)) {
                     $lineValue = $property->fixed;
                 } elseif ($lineValue === null && $property->hasMeta('default')) {
                     $lineValue = $property->default;
@@ -197,7 +210,7 @@ class Transformer implements Contract
                 $value = ($property->beforeReverse)($value, $attributes);
             }
 
-            if ($property->hasMeta('fixed')) {
+            if ($property->hasMeta('fixed') && !($force && $hasValue)) {
                 $value = $property->fixed;
             } elseif ($value === null && $property->hasMeta('default')) {
                 $value = $property->default;
@@ -219,8 +232,8 @@ class Transformer implements Contract
                         break;
 
                     case 'collection':
-                        $value = array_values(array_filter(array_map(function ($item) use ($property) {
-                            return $item ? $this->reverseSchema($property->getAccepts(), $item) : null;
+                        $value = array_values(array_filter(array_map(function ($item) use ($property, $force) {
+                            return $item ? $this->reverseSchema($property->getAccepts(), $item, $force) : null;
                         }, $value)));
                         break;
                 }
