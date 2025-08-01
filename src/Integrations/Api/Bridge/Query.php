@@ -127,10 +127,7 @@ class Query
         );
     }
 
-    /**
-     * @return mixed
-     */
-    protected function resolveConstraintOperator($operator)
+    protected function resolveConstraintOperator($operator): mixed
     {
         if (array_key_exists($operator, $this::OPERATOR_MAP)) {
             $operator = $this::OPERATOR_MAP[$operator];
@@ -139,10 +136,7 @@ class Query
         return $operator;
     }
 
-    /**
-     * @return mixed
-     */
-    protected function resolveConstraintValue($operator, $value, ?Path $path = null)
+    protected function resolveConstraintValue($operator, $value, ?Path $path = null): mixed
     {
         $property = $path?->getEntity();
 

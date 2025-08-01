@@ -10,17 +10,11 @@ abstract class CachedLookup extends Lookup
 {
     protected static int $ttl = 3600; // Default TTL of 1 hour
 
-    /**
-     * Cache key for the lookup values.
-     */
     protected static function cacheKey(): string
     {
         return 'salesforce.lookup.'.static::object().'.'.static::recordTypeId().'.'.static::field();
     }
 
-    /**
-     * Cache time to live in seconds.
-     */
     protected static function ttl(): int
     {
         return static::$ttl;

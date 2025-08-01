@@ -23,9 +23,6 @@ class Transformer implements Contract
         return $this->reverseSchema($this->schema, $attributes);
     }
 
-    /**
-     * Reverse the given attributes while bypassing readonly and fixed field protections.
-     */
     public function forceReverse(array $attributes): array
     {
         return $this->reverseSchema($this->schema, $attributes, true);

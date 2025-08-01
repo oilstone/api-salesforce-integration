@@ -291,6 +291,10 @@ class Repository implements RepositoryInterface
         return $this->transformRecord($record);
     }
 
+    /**
+     * Proxy the findOrFail method on the underlying repository with optional
+     * transformation of the returned record.
+     */
     public function sfFindOrFail(string $id, array $options = [], ?string $object = null): array
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
@@ -329,6 +333,10 @@ class Repository implements RepositoryInterface
         return $this->transformRecord($record);
     }
 
+    /**
+     * Proxy the firstOrFail method on the underlying repository with optional
+     * transformation of the returned record.
+     */
     public function sfFirstOrFail(array $conditions = [], array $options = [], ?string $object = null): array
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
@@ -356,6 +364,11 @@ class Repository implements RepositoryInterface
             $this->identifier,
             $this->cacheHandler,
         );
+    }
+
+    protected function newQuery(?string $object = null): Query
+    {
+        return $this->repository($object)->newQuery();
     }
 
     public function __call(string $method, array $parameters)
@@ -456,11 +469,6 @@ class Repository implements RepositoryInterface
         }
 
         return $reversed;
-    }
-
-    protected function newQuery(?string $object = null): Query
-    {
-        return $this->repository($object)->newQuery();
     }
 
     /**

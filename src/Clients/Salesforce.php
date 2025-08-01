@@ -69,9 +69,6 @@ class Salesforce
         return $data ?? [];
     }
 
-    /**
-     * Perform a SOQL query and return the raw response.
-     */
     public function rawQuery(string $soql): array
     {
         return $this->request(

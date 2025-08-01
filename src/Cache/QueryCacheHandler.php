@@ -79,9 +79,6 @@ class QueryCacheHandler
         return $data;
     }
 
-    /**
-     * Flush cached queries associated with the provided tags.
-     */
     public function flush(array $tags): void
     {
         $cache = $this->cache;
