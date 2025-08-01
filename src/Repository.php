@@ -349,7 +349,7 @@ class Repository
 
         $result = $this->create(array_merge($attributes, $extra));
 
-        return $this->findOrFail($result['id']);
+        return $this->findOrFail(['Id' => $result['id']]);
     }
 
     public function updateOrCreate(array $attributes, array $values = []): Record
@@ -369,7 +369,7 @@ class Repository
 
         $result = $this->create(array_merge($attributes, $values));
 
-        return $this->findOrFail($result['id']);
+        return $this->findOrFail(['Id' => $result['id']]);
     }
 
     protected function isOptionsArray(array $data): bool

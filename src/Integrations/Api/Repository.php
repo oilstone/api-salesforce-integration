@@ -143,7 +143,9 @@ class Repository implements RepositoryInterface
 
         $result = $repository->create($fields);
 
-        return Record::make($repository->findOrFail($result['id'])->toArray());
+        $record = $repository->findOrFail(['Id' => $result['id']]);
+
+        return Record::make($record->toArray());
     }
 
     public function update(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
@@ -178,7 +180,13 @@ class Repository implements RepositoryInterface
 
         $result = $this->repository($object)->create($fields);
 
-        return $this->sfFindOrFail($result['id'], [], $object);
+        $record = $this->repository($object)->findOrFail(['Id' => $result['id']], [
+            'select' => $this->getDefaultFields(),
+        ]);
+
+        return $this->transformer
+            ? $this->transformer->transform($record)
+            : $record->getAttributes();
     }
 
     /**
