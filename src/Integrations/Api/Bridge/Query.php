@@ -2,12 +2,12 @@
 
 namespace Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge;
 
-use Aggregate\Set;
 use Api\Queries\Expression;
 use Api\Queries\Paths\Path;
 use Api\Queries\Relations as RequestRelations;
 use Oilstone\ApiSalesforceIntegration\Query as SalesforceQuery;
-use Oilstone\ApiSalesforceIntegration\Record;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Collection;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record;
 use Carbon\Carbon;
 
 class Query
@@ -31,14 +31,16 @@ class Query
         return $this->baseQuery;
     }
 
-    public function get(): Set
+    public function get(): Collection
     {
-        return $this->baseQuery->get();
+        return Collection::make($this->baseQuery->get());
     }
 
     public function first(): ?Record
     {
-        return $this->baseQuery->first();
+        $result = $this->baseQuery->first();
+
+        return $result ? Record::make($result) : null;
     }
 
     public function include(RequestRelations $relations): self

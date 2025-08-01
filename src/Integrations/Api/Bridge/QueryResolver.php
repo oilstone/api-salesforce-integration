@@ -2,10 +2,10 @@
 
 namespace Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge;
 
-use Aggregate\Set;
 use Api\Pipeline\Pipes\Pipe;
 use Oilstone\ApiSalesforceIntegration\Query as QueryBuilder;
-use Oilstone\ApiSalesforceIntegration\Record;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Collection;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record;
 use Psr\Http\Message\ServerRequestInterface;
 
 class QueryResolver
@@ -36,7 +36,7 @@ class QueryResolver
         return $this->resolve($this->keyedQuery($request->getQueryParams()['key'] ?? null), $request)->first();
     }
 
-    public function collection(ServerRequestInterface $request): Set
+    public function collection(ServerRequestInterface $request): Collection
     {
         return $this->resolve($this->baseQuery(), $request)->get();
     }

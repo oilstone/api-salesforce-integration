@@ -9,11 +9,11 @@ use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
-use Oilstone\ApiSalesforceIntegration\Collection;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Collection;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
-use Oilstone\ApiSalesforceIntegration\Record;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record;
 use Psr\Http\Message\ServerRequestInterface;
 
 class Repository implements RepositoryInterface
@@ -95,14 +95,14 @@ class Repository implements RepositoryInterface
     {
         $result = $this->repository()->find($pipe->getKey());
 
-        return $result ? Record::make($result->toArray()) : null;
+        return $result ? Record::make($result) : null;
     }
 
     public function getById(string $id): ResultRecordInterface
     {
         $result = $this->repository()->findOrFail($id);
 
-        return Record::make($result->toArray());
+        return Record::make($result);
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
@@ -145,7 +145,7 @@ class Repository implements RepositoryInterface
 
         $record = $repository->findOrFail(['Id' => $result['id']]);
 
-        return Record::make($record->toArray());
+        return Record::make($record);
     }
 
     public function update(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
@@ -158,7 +158,7 @@ class Repository implements RepositoryInterface
 
         $this->repository($object)->update($id, $fields);
 
-        return Record::make($repository->findOrFail($id)->toArray());
+        return Record::make($repository->findOrFail($id));
     }
 
     public function delete(Pipe $pipe): ResultRecordInterface
@@ -184,9 +184,7 @@ class Repository implements RepositoryInterface
             'select' => $this->getDefaultFields(),
         ]);
 
-        return $this->transformer
-            ? $this->transformer->transform($record)
-            : $record->getAttributes();
+        return $this->transformRecord($record);
     }
 
     /**
@@ -225,9 +223,7 @@ class Repository implements RepositoryInterface
 
         $record = $this->repository($object)->firstOrCreate($attrs, $extraFields);
 
-        return $this->transformer
-            ? $this->transformer->transform($record)
-            : $record->getAttributes();
+        return $this->transformRecord($record);
     }
 
     /**
@@ -241,9 +237,7 @@ class Repository implements RepositoryInterface
 
         $record = $this->repository($object)->updateOrCreate($attrs, $valueFields);
 
-        return $this->transformer
-            ? $this->transformer->transform($record)
-            : $record->getAttributes();
+        return $this->transformRecord($record);
     }
 
     /**
@@ -256,13 +250,9 @@ class Repository implements RepositoryInterface
 
         $conditions = $this->reverseConditions($conditions);
 
-        $collection = $this->repository($object)->get($conditions, $options);
+        $records = $this->repository($object)->get($conditions, $options);
 
-        return array_map(function (Record $record) {
-            return $this->transformer
-                ? $this->transformer->transform($record)
-                : $record->getAttributes();
-        }, $collection->getItems());
+        return array_map(fn (array $record) => $this->transformRecord($record), $records);
     }
 
     /**
@@ -279,9 +269,7 @@ class Repository implements RepositoryInterface
             return null;
         }
 
-        return $this->transformer
-            ? $this->transformer->transform($record)
-            : $record->getAttributes();
+        return $this->transformRecord($record);
     }
 
     public function sfFindOrFail(string $id, array $options = [], ?string $object = null): array
@@ -290,9 +278,7 @@ class Repository implements RepositoryInterface
 
         $record = $this->repository($object)->findOrFail($id, $options);
 
-        return $this->transformer
-            ? $this->transformer->transform($record)
-            : $record->getAttributes();
+        return $this->transformRecord($record);
     }
 
     /**
@@ -321,9 +307,7 @@ class Repository implements RepositoryInterface
             return null;
         }
 
-        return $this->transformer
-            ? $this->transformer->transform($record)
-            : $record->getAttributes();
+        return $this->transformRecord($record);
     }
 
     public function sfFirstOrFail(array $conditions = [], array $options = [], ?string $object = null): array
@@ -334,9 +318,7 @@ class Repository implements RepositoryInterface
 
         $record = $this->repository($object)->firstOrFail($conditions, $options);
 
-        return $this->transformer
-            ? $this->transformer->transform($record)
-            : $record->getAttributes();
+        return $this->transformRecord($record);
     }
 
     public function repository(?string $object = null): BaseRepository
@@ -370,6 +352,20 @@ class Repository implements RepositoryInterface
             static::class,
             $method
         ));
+    }
+
+    /**
+     * Transform a record array using the configured transformer.
+     */
+    protected function transformRecord(array $record): array
+    {
+        if (! $this->transformer) {
+            return $record;
+        }
+
+        $recordObj = Record::make($record);
+
+        return $this->transformer->transform($recordObj);
     }
 
     /**

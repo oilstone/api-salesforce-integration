@@ -1,6 +1,6 @@
 <?php
 
-namespace Oilstone\ApiSalesforceIntegration;
+namespace Oilstone\ApiSalesforceIntegration\Integrations\Api\Results;
 
 use Aggregate\Set;
 use Api\Result\Contracts\Collection as Contract;
