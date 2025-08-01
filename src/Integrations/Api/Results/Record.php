@@ -1,10 +1,10 @@
 <?php
 
-namespace Oilstone\ApiSalesforceIntegration;
+namespace Oilstone\ApiSalesforceIntegration\Integrations\Api\Results;
 
 use Aggregate\Map;
 use Api\Result\Contracts\Record as ApiRecordContract;
-use Oilstone\ApiSalesforceIntegration\Collection;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Collection;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 
 class Record extends Map implements ApiRecordContract

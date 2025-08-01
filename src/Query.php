@@ -2,7 +2,6 @@
 
 namespace Oilstone\ApiSalesforceIntegration;
 
-use Aggregate\Set;
 use Api\Exceptions\InvalidQueryArgumentsException;
 use Api\Exceptions\UnknownOperatorException;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
@@ -276,7 +275,7 @@ class Query
         return $this;
     }
 
-    public function get(): Set
+    public function get(): array
     {
         $soql = $this->toSoql();
 
@@ -286,17 +285,14 @@ class Query
             ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, ['log_request' => true])
             : $callback();
 
-        return (new Set)->fill(array_map(
-            fn (array $item) => (new Record)->fill($item),
-            $results
-        ));
+        return $results;
     }
 
-    public function first(): ?Record
+    public function first(): ?array
     {
         $result = $this->limit(1)->get();
 
-        return $result->count() ? $result[0] : null;
+        return $result[0] ?? null;
     }
 
     /**
@@ -325,10 +321,10 @@ class Query
         $values = [];
 
         foreach ($results as $record) {
-            $value = $record instanceof Record ? $record->get($column) : $record[$column] ?? null;
+            $value = $record[$column] ?? null;
 
             if ($index) {
-                $key = $record instanceof Record ? $record->get($index) : $record[$index] ?? null;
+                $key = $record[$index] ?? null;
                 $values[$key] = $value;
             } else {
                 $values[] = $value;

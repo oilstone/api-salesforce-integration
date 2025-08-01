@@ -149,7 +149,7 @@ class Repository
         return $query;
     }
 
-    public function find(string|array $idConditionsOrOptions, array $options = []): ?Record
+    public function find(string|array $idConditionsOrOptions, array $options = []): ?array
     {
         $query = $this->newQuery();
 
@@ -187,7 +187,7 @@ class Repository
         return $this->applyOptions($query, $options)->first();
     }
 
-    public function findOrFail(string|array $idConditionsOrOptions, array $options = []): Record
+    public function findOrFail(string|array $idConditionsOrOptions, array $options = []): array
     {
         $record = $this->find($idConditionsOrOptions, $options);
 
@@ -198,7 +198,7 @@ class Repository
         return $record;
     }
 
-    public function first(array $conditionsOrOptions = [], array $options = []): ?Record
+    public function first(array $conditionsOrOptions = [], array $options = []): ?array
     {
         if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
             $options = $conditionsOrOptions;
@@ -218,7 +218,7 @@ class Repository
         return $this->applyOptions($query, $options)->first();
     }
 
-    public function firstOrFail(array $conditionsOrOptions = [], array $options = []): Record
+    public function firstOrFail(array $conditionsOrOptions = [], array $options = []): array
     {
         $record = $this->first($conditionsOrOptions, $options);
 
@@ -229,7 +229,7 @@ class Repository
         return $record;
     }
 
-    public function get(array $conditionsOrOptions = [], array $options = []): Collection
+    public function get(array $conditionsOrOptions = [], array $options = []): array
     {
         if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
             $options = $conditionsOrOptions;
@@ -328,12 +328,12 @@ class Repository
         return $result;
     }
 
-    public function getById(string $id, array $options = []): ?Record
+    public function getById(string $id, array $options = []): ?array
     {
         return $this->find($id, $options);
     }
 
-    public function firstOrCreate(array $attributes, array $extra = []): Record
+    public function firstOrCreate(array $attributes, array $extra = []): array
     {
         $query = $this->newQuery();
 
@@ -352,7 +352,7 @@ class Repository
         return $this->findOrFail(['Id' => $result['id']]);
     }
 
-    public function updateOrCreate(array $attributes, array $values = []): Record
+    public function updateOrCreate(array $attributes, array $values = []): array
     {
         $query = $this->newQuery();
 
