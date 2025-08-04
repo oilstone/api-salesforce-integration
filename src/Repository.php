@@ -247,6 +247,24 @@ class Repository
         return $this->applyOptions($query, $options)->get();
     }
 
+    public function pluck(string $column, ?string $index = null, array $conditionsOrOptions = [], array $options = []): array
+    {
+        if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
+            $options = $conditionsOrOptions;
+            $conditions = [];
+        } else {
+            $conditions = $conditionsOrOptions;
+        }
+
+        $query = $this->newQuery()->select([]);
+
+        foreach ($conditions as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        return $this->applyOptions($query, $options)->pluck($column, $index);
+    }
+
     public function count(array $conditionsOrOptions = [], array $options = []): int
     {
         if ($options === [] && $this->isOptionsArray($conditionsOrOptions)) {
