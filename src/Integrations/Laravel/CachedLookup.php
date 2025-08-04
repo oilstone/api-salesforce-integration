@@ -4,9 +4,9 @@ namespace Oilstone\ApiSalesforceIntegration\Integrations\Laravel;
 
 use Illuminate\Support\Facades\Cache;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
-use Oilstone\ApiSalesforceIntegration\Lookups\Lookup;
+use Oilstone\ApiSalesforceIntegration\Lookups\PickListLookup;
 
-abstract class CachedLookup extends Lookup
+abstract class CachedLookup extends PickListLookup
 {
     protected static int $ttl = 3600; // Default TTL of 1 hour
 
