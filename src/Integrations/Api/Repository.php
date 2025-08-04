@@ -362,6 +362,27 @@ class Repository implements RepositoryInterface
         );
     }
 
+    /**
+     * Create a repository instance with no inherited defaults.
+     */
+    public function freshRepository(?string $object = null): BaseRepository
+    {
+        $object ??= $this->object;
+
+        if (! $object) {
+            throw new \Oilstone\ApiSalesforceIntegration\Exceptions\ObjectNotSpecifiedException();
+        }
+
+        return new BaseRepository(
+            $object,
+            [],
+            [],
+            [],
+            'Id',
+            $this->cacheHandler,
+        );
+    }
+
     protected function newQuery(?string $object = null): Query
     {
         return $this->repository($object)->newQuery();

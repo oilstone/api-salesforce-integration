@@ -116,6 +116,19 @@ $account = (new Repository('Account'))
 Related data is returned as a simple array of child records without the
 Salesforce metadata wrappers.
 
+### Creating a fresh repository
+
+When you need a repository for a different object without inheriting the
+current repository's default constraints, includes or schema defaults, use
+`freshRepository`:
+
+```php
+$accountRepo = (new AccountRepository())->setClient($salesforce);
+$facilityRepo = $accountRepo->freshRepository('Museum_Facility__c');
+```
+
+The returned repository is clean and can be configured independently.
+
 ## Lookups
 
 Extend `Lookup` or `CachedLookup` to pull picklist values from Salesforce:
