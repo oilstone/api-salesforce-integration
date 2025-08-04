@@ -140,6 +140,10 @@ class Repository
             $query->offset($options['offset']);
         }
 
+        if (isset($options['skip_cache'])) {
+            $query->setCacheOptions(['skip_cache' => $options['skip_cache']]);
+        }
+
         return $query;
     }
 
@@ -365,7 +369,7 @@ class Repository
 
     protected function isOptionsArray(array $data): bool
     {
-        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset'];
+        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset', 'skip_cache'];
 
         return (bool) array_intersect(array_keys($data), $optionKeys);
     }
