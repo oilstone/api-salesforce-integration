@@ -12,7 +12,9 @@ use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
-use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record as ApiResultRecord;
+use Oilstone\ApiSalesforceIntegration\SfCollection;
+use Oilstone\ApiSalesforceIntegration\SfRecord;
 use Psr\Http\Message\ServerRequestInterface;
 
 class Repository implements RepositoryInterface
@@ -94,7 +96,7 @@ class Repository implements RepositoryInterface
     {
         $result = $this->repository()->find($pipe->getKey());
 
-        return $result ? Record::make($result) : null;
+        return $result ? ApiResultRecord::make($result) : null;
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
@@ -127,7 +129,7 @@ class Repository implements RepositoryInterface
 
         $record = $repository->findOrFail(['Id' => $result['id']]);
 
-        return Record::make($record);
+        return ApiResultRecord::make($record);
     }
 
     public function update(Pipe $pipe, ServerRequestInterface $request): ResultRecordInterface
@@ -143,7 +145,7 @@ class Repository implements RepositoryInterface
 
         $record = $repository->findOrFail($id);
 
-        return Record::make($record);
+        return ApiResultRecord::make($record);
     }
 
     public function delete(Pipe $pipe): ResultRecordInterface
@@ -154,14 +156,14 @@ class Repository implements RepositoryInterface
 
         $repository->delete($pipe->getKey());
 
-        return Record::make($record);
+        return ApiResultRecord::make($record);
     }
 
     /**
      * Create a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
-    public function sfCreate(array $attributes, ?string $object = null): array
+    public function sfCreate(array $attributes, ?string $object = null): SfRecord
     {
         $fields = $this->reverseAttributes($attributes, true);
 
@@ -175,7 +177,7 @@ class Repository implements RepositoryInterface
     /**
      * Force create a record bypassing readonly and fixed field protections.
      */
-    public function sfForceCreate(array $attributes, ?string $object = null): array
+    public function sfForceCreate(array $attributes, ?string $object = null): SfRecord
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
@@ -190,7 +192,7 @@ class Repository implements RepositoryInterface
      * Update a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
-    public function sfUpdate(string $id, array $attributes, ?string $object = null): array
+    public function sfUpdate(string $id, array $attributes, ?string $object = null): SfRecord
     {
         $fields = $this->reverseAttributes($attributes, true);
 
@@ -202,7 +204,7 @@ class Repository implements RepositoryInterface
     /**
      * Force update a record bypassing readonly and fixed field protections.
      */
-    public function sfForceUpdate(string $id, array $attributes, ?string $object = null): array
+    public function sfForceUpdate(string $id, array $attributes, ?string $object = null): SfRecord
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
@@ -214,7 +216,7 @@ class Repository implements RepositoryInterface
     /**
      * Delete a record using the underlying repository.
      */
-    public function sfDelete(string $id, ?string $object = null): array
+    public function sfDelete(string $id, ?string $object = null): SfRecord
     {
         $record = $this->sfFindOrFail($id, [], $object);
 
@@ -227,7 +229,7 @@ class Repository implements RepositoryInterface
      * Proxy the firstOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function sfFirstOrCreate(array $attributes, array $extra = [], ?string $object = null): array
+    public function sfFirstOrCreate(array $attributes, array $extra = [], ?string $object = null): SfRecord
     {
         $attrs = $this->reverseConditions($attributes);
         $extraFields = $this->reverseAttributes($extra, true);
@@ -241,7 +243,7 @@ class Repository implements RepositoryInterface
      * Proxy the updateOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function sfUpdateOrCreate(array $attributes, array $values = [], ?string $object = null): array
+    public function sfUpdateOrCreate(array $attributes, array $values = [], ?string $object = null): SfRecord
     {
         $attrs = $this->reverseConditions($attributes);
         $valueFields = $this->reverseAttributes($values, true);
@@ -255,7 +257,7 @@ class Repository implements RepositoryInterface
      * Proxy the get method on the underlying repository with optional
      * transformation of the returned records.
      */
-    public function sfGet(array $conditions = [], array $options = [], ?string $object = null): array
+    public function sfGet(array $conditions = [], array $options = [], ?string $object = null): SfCollection
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -263,14 +265,16 @@ class Repository implements RepositoryInterface
 
         $records = $this->repository($object)->get($conditions, $options);
 
-        return array_map(fn (array $record) => $this->transformRecord($record), $records);
+        $records = array_map(fn (array $record) => $this->transformRecord($record), $records);
+
+        return SfCollection::make($records);
     }
 
     /**
      * Proxy the find method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFind(string $id, array $options = [], ?string $object = null): ?array
+    public function sfFind(string $id, array $options = [], ?string $object = null): ?SfRecord
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -287,7 +291,7 @@ class Repository implements RepositoryInterface
      * Proxy the findOrFail method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFindOrFail(string $id, array $options = [], ?string $object = null): array
+    public function sfFindOrFail(string $id, array $options = [], ?string $object = null): SfRecord
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -310,7 +314,7 @@ class Repository implements RepositoryInterface
      * Proxy the first method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFirst(array $conditions = [], array $options = [], ?string $object = null): ?array
+    public function sfFirst(array $conditions = [], array $options = [], ?string $object = null): ?SfRecord
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -329,7 +333,7 @@ class Repository implements RepositoryInterface
      * Proxy the firstOrFail method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFirstOrFail(array $conditions = [], array $options = [], ?string $object = null): array
+    public function sfFirstOrFail(array $conditions = [], array $options = [], ?string $object = null): SfRecord
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -381,15 +385,16 @@ class Repository implements RepositoryInterface
     /**
      * Transform a record array using the configured transformer.
      */
-    protected function transformRecord(array $record): array
+    protected function transformRecord(array $record): SfRecord
     {
-        if (! $this->transformer) {
-            return $record;
+        $raw = $record;
+
+        if ($this->transformer) {
+            $recordObj = ApiResultRecord::make($record);
+            $record = $this->transformer->transform($recordObj);
         }
 
-        $recordObj = Record::make($record);
-
-        return $this->transformer->transform($recordObj);
+        return SfRecord::make($record, $raw);
     }
 
     /**
