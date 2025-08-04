@@ -293,7 +293,7 @@ class Repository
         $payload = array_replace_recursive($this->defaultValues, $attributes);
         $payload = $this->filterNullDefaults($payload, $attributes);
 
-        $result = $this->getClient()->update($this->object, $id, $payload);
+        $result = $this->getClient()->update($this->object, $id, $payload, $this->defaultIdentifier);
 
         if ($this->cacheHandler) {
             $this->cacheHandler->flush([
@@ -307,7 +307,7 @@ class Repository
 
     public function delete(string $id): array
     {
-        $result = $this->getClient()->delete($this->object, $id);
+        $result = $this->getClient()->delete($this->object, $id, $this->defaultIdentifier);
 
         if ($this->cacheHandler) {
             $this->cacheHandler->flush([
