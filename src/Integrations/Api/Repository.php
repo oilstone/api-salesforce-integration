@@ -9,7 +9,6 @@ use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
-use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Collection;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
@@ -96,13 +95,6 @@ class Repository implements RepositoryInterface
         $result = $this->repository()->find($pipe->getKey());
 
         return $result ? Record::make($result) : null;
-    }
-
-    public function getById(string $id): ResultRecordInterface
-    {
-        $result = $this->repository()->findOrFail($id);
-
-        return Record::make($this->transformRecord($result));
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
