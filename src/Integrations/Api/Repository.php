@@ -490,7 +490,9 @@ class Repository implements RepositoryInterface
     }
 
     /**
-     * Gets the default fields from the schema, including nested schema properties.
+     * Gets the default fields from the schema, including nested schema properties,
+     * and ensures identifier fields such as the Salesforce 'Id' and any custom
+     * identifier are present.
      *
      * @return array A flat array of unique field names.
      */
@@ -500,6 +502,14 @@ class Repository implements RepositoryInterface
 
         if ($this->schema) {
             $fields = $this->extractSchemaFields($this->schema);
+        }
+
+        if (! in_array('Id', $fields, true)) {
+            $fields[] = 'Id';
+        }
+
+        if ($this->identifier !== 'Id' && ! in_array($this->identifier, $fields, true)) {
+            $fields[] = $this->identifier;
         }
 
         return array_unique($fields);
