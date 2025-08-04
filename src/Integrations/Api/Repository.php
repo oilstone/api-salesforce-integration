@@ -13,8 +13,8 @@ use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record as ApiResultRecord;
-use Oilstone\ApiSalesforceIntegration\SfCollection;
-use Oilstone\ApiSalesforceIntegration\SfRecord;
+use Oilstone\ApiSalesforceIntegration\RecordCollection;
+use Oilstone\ApiSalesforceIntegration\Record;
 use Psr\Http\Message\ServerRequestInterface;
 
 class Repository implements RepositoryInterface
@@ -163,7 +163,7 @@ class Repository implements RepositoryInterface
      * Create a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
-    public function sfCreate(array $attributes, ?string $object = null): SfRecord
+    public function createRecord(array $attributes, ?string $object = null): Record
     {
         $fields = $this->reverseAttributes($attributes, true);
 
@@ -177,7 +177,7 @@ class Repository implements RepositoryInterface
     /**
      * Force create a record bypassing readonly and fixed field protections.
      */
-    public function sfForceCreate(array $attributes, ?string $object = null): SfRecord
+    public function forceCreateRecord(array $attributes, ?string $object = null): Record
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
@@ -192,33 +192,33 @@ class Repository implements RepositoryInterface
      * Update a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
-    public function sfUpdate(string $id, array $attributes, ?string $object = null): SfRecord
+    public function updateRecord(string $id, array $attributes, ?string $object = null): Record
     {
         $fields = $this->reverseAttributes($attributes, true);
 
         $this->repository($object)->update($id, $fields);
 
-        return $this->sfFindOrFail($id, [], $object);
+        return $this->findRecordOrFail($id, [], $object);
     }
 
     /**
      * Force update a record bypassing readonly and fixed field protections.
      */
-    public function sfForceUpdate(string $id, array $attributes, ?string $object = null): SfRecord
+    public function forceUpdateRecord(string $id, array $attributes, ?string $object = null): Record
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
         $this->repository($object)->update($id, $fields);
 
-        return $this->sfFindOrFail($id, [], $object);
+        return $this->findRecordOrFail($id, [], $object);
     }
 
     /**
      * Delete a record using the underlying repository.
      */
-    public function sfDelete(string $id, ?string $object = null): SfRecord
+    public function deleteRecord(string $id, ?string $object = null): Record
     {
-        $record = $this->sfFindOrFail($id, [], $object);
+        $record = $this->findRecordOrFail($id, [], $object);
 
         $this->repository($object)->delete($id);
 
@@ -229,7 +229,7 @@ class Repository implements RepositoryInterface
      * Proxy the firstOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function sfFirstOrCreate(array $attributes, array $extra = [], ?string $object = null): SfRecord
+    public function firstOrCreateRecord(array $attributes, array $extra = [], ?string $object = null): Record
     {
         $attrs = $this->reverseConditions($attributes);
         $extraFields = $this->reverseAttributes($extra, true);
@@ -243,7 +243,7 @@ class Repository implements RepositoryInterface
      * Proxy the updateOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function sfUpdateOrCreate(array $attributes, array $values = [], ?string $object = null): SfRecord
+    public function updateOrCreateRecord(array $attributes, array $values = [], ?string $object = null): Record
     {
         $attrs = $this->reverseConditions($attributes);
         $valueFields = $this->reverseAttributes($values, true);
@@ -257,7 +257,7 @@ class Repository implements RepositoryInterface
      * Proxy the get method on the underlying repository with optional
      * transformation of the returned records.
      */
-    public function sfGet(array $conditions = [], array $options = [], ?string $object = null): SfCollection
+    public function getRecords(array $conditions = [], array $options = [], ?string $object = null): RecordCollection
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -267,14 +267,14 @@ class Repository implements RepositoryInterface
 
         $records = array_map(fn (array $record) => $this->transformRecord($record), $records);
 
-        return SfCollection::make($records);
+        return RecordCollection::make($records);
     }
 
     /**
      * Proxy the find method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFind(string $id, array $options = [], ?string $object = null): ?SfRecord
+    public function findRecord(string $id, array $options = [], ?string $object = null): ?Record
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -291,7 +291,7 @@ class Repository implements RepositoryInterface
      * Proxy the findOrFail method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFindOrFail(string $id, array $options = [], ?string $object = null): SfRecord
+    public function findRecordOrFail(string $id, array $options = [], ?string $object = null): Record
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -303,7 +303,7 @@ class Repository implements RepositoryInterface
     /**
      * Proxy the count method on the underlying repository.
      */
-    public function sfCount(array $conditions = [], array $options = [], ?string $object = null): int
+    public function countRecords(array $conditions = [], array $options = [], ?string $object = null): int
     {
         $conditions = $this->reverseConditions($conditions);
 
@@ -314,7 +314,7 @@ class Repository implements RepositoryInterface
      * Proxy the first method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFirst(array $conditions = [], array $options = [], ?string $object = null): ?SfRecord
+    public function firstRecord(array $conditions = [], array $options = [], ?string $object = null): ?Record
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -333,7 +333,7 @@ class Repository implements RepositoryInterface
      * Proxy the firstOrFail method on the underlying repository with optional
      * transformation of the returned record.
      */
-    public function sfFirstOrFail(array $conditions = [], array $options = [], ?string $object = null): SfRecord
+    public function firstRecordOrFail(array $conditions = [], array $options = [], ?string $object = null): Record
     {
         $options['select'] = $options['select'] ?? $this->getDefaultFields();
 
@@ -385,7 +385,7 @@ class Repository implements RepositoryInterface
     /**
      * Transform a record array using the configured transformer.
      */
-    protected function transformRecord(array $record): SfRecord
+    protected function transformRecord(array $record): Record
     {
         $raw = $record;
 
@@ -394,7 +394,7 @@ class Repository implements RepositoryInterface
             $record = $this->transformer->transform($recordObj);
         }
 
-        return SfRecord::make($record, $raw);
+        return Record::make($record, $raw);
     }
 
     /**
