@@ -102,7 +102,7 @@ class Repository implements RepositoryInterface
     {
         $result = $this->repository()->findOrFail($id);
 
-        return Record::make($result);
+        return Record::make($this->transformRecord($result));
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
