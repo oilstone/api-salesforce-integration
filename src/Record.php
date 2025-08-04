@@ -4,18 +4,18 @@ namespace Oilstone\ApiSalesforceIntegration;
 
 use Aggregate\Map;
 
-class SfRecord extends Map
+class Record extends Map
 {
     protected array $raw = [];
 
-    public static function make(array $attributes, array $raw): static
+    public static function make(array $attributes, array $raw = []): static
     {
         return (new static)->fill($attributes)->setRawAttributes($raw);
     }
 
-    public function setRawAttributes(array $raw): static
+    public function setRawAttributes(?array $raw): static
     {
-        $this->raw = $raw;
+        $this->raw = $raw ?? [];
 
         return $this;
     }

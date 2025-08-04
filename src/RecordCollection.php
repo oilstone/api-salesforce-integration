@@ -4,7 +4,7 @@ namespace Oilstone\ApiSalesforceIntegration;
 
 use Aggregate\Set;
 
-class SfCollection extends Set
+class RecordCollection extends Set
 {
     public static function make(array $records): static
     {
@@ -13,6 +13,6 @@ class SfCollection extends Set
 
     public function toArray(): array
     {
-        return array_map(fn (SfRecord $record) => $record->toArray(), $this->all());
+        return array_map(fn (Record $record) => $record->toArray(), $this->all());
     }
 }
