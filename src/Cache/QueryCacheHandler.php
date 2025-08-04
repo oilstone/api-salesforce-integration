@@ -57,7 +57,7 @@ class QueryCacheHandler
             }
         }
 
-        if ($cache->has($key)) {
+        if (! ($options['skip_cache'] ?? false) && $cache->has($key)) {
             $value = $cache->get($key);
             if (is_array($value)) {
                 if ($options['log_request'] ?? false) {
