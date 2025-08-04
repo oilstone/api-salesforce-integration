@@ -140,6 +140,10 @@ class Repository
             $query->offset($options['offset']);
         }
 
+        if (isset($options['skip_cache'])) {
+            $query->setCacheOptions(['skip_cache' => $options['skip_cache']]);
+        }
+
         return $query;
     }
 
@@ -293,7 +297,7 @@ class Repository
         $payload = array_replace_recursive($this->defaultValues, $attributes);
         $payload = $this->filterNullDefaults($payload, $attributes);
 
-        $result = $this->getClient()->update($this->object, $id, $payload);
+        $result = $this->getClient()->update($this->object, $id, $payload, $this->defaultIdentifier);
 
         if ($this->cacheHandler) {
             $this->cacheHandler->flush([
@@ -307,7 +311,7 @@ class Repository
 
     public function delete(string $id): array
     {
-        $result = $this->getClient()->delete($this->object, $id);
+        $result = $this->getClient()->delete($this->object, $id, $this->defaultIdentifier);
 
         if ($this->cacheHandler) {
             $this->cacheHandler->flush([
@@ -365,7 +369,7 @@ class Repository
 
     protected function isOptionsArray(array $data): bool
     {
-        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset'];
+        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset', 'skip_cache'];
 
         return (bool) array_intersect(array_keys($data), $optionKeys);
     }

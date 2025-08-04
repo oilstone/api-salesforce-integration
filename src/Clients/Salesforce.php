@@ -126,16 +126,32 @@ class Salesforce
         ]);
     }
 
-    public function update(string $object, string $id, array $payload): array
+    public function update(string $object, string $id, array $payload, string $identifier = 'Id'): array
     {
-        return $this->request('PATCH', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/'.trim($id, '/'), [
+        $url = $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/');
+
+        if ($identifier !== 'Id') {
+            $url .= '/'.trim($identifier, '/').'/'.trim($id, '/');
+        } else {
+            $url .= '/'.trim($id, '/');
+        }
+
+        return $this->request('PATCH', $url, [
             'json' => $payload,
             'log_request' => true,
         ]);
     }
 
-    public function delete(string $object, string $id): array
+    public function delete(string $object, string $id, string $identifier = 'Id'): array
     {
-        return $this->request('DELETE', $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/').'/'.trim($id, '/'), ['log_request' => true]);
+        $url = $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/');
+
+        if ($identifier !== 'Id') {
+            $url .= '/'.trim($identifier, '/').'/'.trim($id, '/');
+        } else {
+            $url .= '/'.trim($id, '/');
+        }
+
+        return $this->request('DELETE', $url, ['log_request' => true]);
     }
 }

@@ -24,9 +24,17 @@ class ClearCache extends Command
             return 1;
         }
 
-        $tags = [$resource];
         if ($id) {
-            $tags[] = $resource . ':' . $id;
+            $tags = [
+                $resource . ':' . $id,
+                $resource . ':findMany',
+            ];
+        } else {
+            $tags = [
+                $resource,
+                $resource . ':findMany',
+                $resource . ':findOne',
+            ];
         }
 
         Cache::tags($tags)->flush();

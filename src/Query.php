@@ -32,6 +32,8 @@ class Query
 
     protected array $cacheTags = [];
 
+    protected array $cacheOptions = [];
+
     public function __construct(string $object, Salesforce $client, string $identifier = 'Id')
     {
         $this->object = $object;
@@ -50,6 +52,13 @@ class Query
     public function setCacheTags(array $tags): static
     {
         $this->cacheTags = $tags;
+
+        return $this;
+    }
+
+    public function setCacheOptions(array $options): static
+    {
+        $this->cacheOptions = $options;
 
         return $this;
     }
@@ -281,8 +290,10 @@ class Query
 
         $callback = fn () => $this->client->query($soql);
 
+        $options = array_merge(['log_request' => true], $this->cacheOptions);
+
         $results = $this->cacheHandler
-            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, ['log_request' => true])
+            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, $options)
             : $callback();
 
         return $results;
@@ -346,8 +357,10 @@ class Query
 
         $callback = fn () => $this->client->rawQuery($soql);
 
+        $options = array_merge(['log_request' => true], $this->cacheOptions);
+
         $result = $this->cacheHandler
-            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, ['log_request' => true])
+            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, $options)
             : $callback();
 
         return $result['totalSize'] ?? 0;
