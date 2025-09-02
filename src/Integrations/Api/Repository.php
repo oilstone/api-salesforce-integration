@@ -450,7 +450,8 @@ class Repository implements RepositoryInterface
             return [];
         }
 
-        $reversed = $this->reverseAttributes($conditions, false);
+        // Force reversing so readonly fields remain available for querying.
+        $reversed = $this->reverseAttributes($conditions, false, true);
 
         if ($this->schema) {
             $reversed = $this->stripDefaultValues($reversed, $this->getDefaultValues(), $conditions);
