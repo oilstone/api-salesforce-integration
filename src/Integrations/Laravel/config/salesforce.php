@@ -7,4 +7,5 @@ return [
     'client_secret' => env('SALESFORCE_CLIENT_SECRET'),
     'debug' => env('SALESFORCE_DEBUG', false),
     'query_cache_default_ttl' => env('SALESFORCE_QUERY_CACHE_DEFAULT_TTL', 3600),
+    'scopes' => array_filter(array_map('trim', explode(',', (string) env('SALESFORCE_SCOPES', '')))),
 ];
