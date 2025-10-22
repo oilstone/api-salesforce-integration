@@ -29,12 +29,28 @@ class ServiceProvider extends BaseServiceProvider
             $client = new Client;
 
             $token = Cache::remember('salesforce.access_token', 55 * 60, function () use ($client, $config) {
+                $formParams = [
+                    'grant_type' => 'client_credentials',
+                    'client_id' => $config['client_id'],
+                    'client_secret' => $config['client_secret'],
+                ];
+
+                $scopeConfig = $config['scopes'] ?? null;
+
+                if (is_array($scopeConfig)) {
+                    $scopeConfig = implode(' ', array_filter($scopeConfig));
+                } elseif (is_string($scopeConfig)) {
+                    $scopeConfig = trim($scopeConfig);
+                } else {
+                    $scopeConfig = '';
+                }
+
+                if ($scopeConfig !== '') {
+                    $formParams['scope'] = $scopeConfig;
+                }
+
                 $response = $client->post($config['instance_url'].'/services/oauth2/token', [
-                    'form_params' => [
-                        'grant_type' => 'client_credentials',
-                        'client_id' => $config['client_id'],
-                        'client_secret' => $config['client_secret'],
-                    ],
+                    'form_params' => $formParams,
                 ]);
 
                 $data = json_decode((string) $response->getBody(), true);
