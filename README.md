@@ -131,6 +131,31 @@ $facilityRepo = $accountRepo->freshRepository('Museum_Facility__c');
 
 The returned repository is clean and can be configured independently.
 
+## Schema meta properties
+
+When a resource is backed by an `Api\Schema\Schema`, meta properties on the
+schema fields control how values are fetched from Salesforce, transformed for
+API consumers and written back. The integration recognises the following meta
+keys:
+
+| Meta key | Behaviour |
+| --- | --- |
+| `validationOnly` | Excludes the field from every read/write operation so it can still be validated by the API schema without hitting Salesforce. |
+| `needs` | Ensures additional Salesforce fields are always selected with the property (accepts a string or array of field names). |
+| `calculated` | Marks the property as derived so it is never selected, has no defaults extracted and is ignored when writing back. |
+| `isRelation` | Skips the property when building field lists and payloads because the value comes from relationship includes. |
+| `readonly` | Omits the property from create/update payloads unless `forceReverse` is used on the transformer. |
+| `fixed` | Forces the property to a constant value for reads and writes, and seeds that value when building defaults. |
+| `default` | Provides a fallback when no explicit value is supplied and is also surfaced by `Repository::getDefaultValues()`. |
+| `beforeTransform` / `afterTransform` | Callables that run before/after a record is transformed for API output, letting you massage inbound values. |
+| `beforeReverse` / `afterReverse` | Callables that run before/after values are prepared for Salesforce, giving hooks for last-mile tweaks. |
+| `delimited` | Treats the field as a delimited list. Responses are exploded into arrays and outbound arrays are imploded using the delimiter string stored on the property. |
+| `isYesNo` | Converts 'Yes'/'No' Salesforce strings to booleans when reading, back to Salesforce-friendly strings when writing, and applies the same mapping to query constraints. |
+| `isAddressLine` | Maps a specific numbered line of a multi-line address field when transforming in either direction, rebuilding the combined field on writes. |
+
+These meta keys can be combined to tailor how each schema property interacts
+with Salesforce while keeping the resource definition declarative.
+
 ## Lookups
 
 Extend `Lookup` or `CachedLookup` to pull picklist values from Salesforce:
