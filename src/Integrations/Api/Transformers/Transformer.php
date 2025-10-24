@@ -227,7 +227,9 @@ class Transformer implements Contract
 
                     case 'datetime':
                     case 'timestamp':
-                        $value = Carbon::parse($value)->toDateTimeString();
+                        $value = Carbon::parse($value)
+                            ->setTimezone('UTC')
+                            ->format('Y-m-d\TH:i:s\Z');
                         break;
 
                     case 'collection':
