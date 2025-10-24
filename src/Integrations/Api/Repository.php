@@ -8,6 +8,7 @@ use Api\Result\Contracts\Collection as ResultCollectionInterface;
 use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer;
+use ArgumentCountError;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
@@ -16,6 +17,7 @@ use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record as ApiResu
 use Oilstone\ApiSalesforceIntegration\RecordCollection;
 use Oilstone\ApiSalesforceIntegration\Record;
 use Psr\Http\Message\ServerRequestInterface;
+use TypeError;
 
 class Repository implements RepositoryInterface
 {
@@ -596,7 +598,8 @@ class Repository implements RepositoryInterface
             }
 
             if ($property->hasMeta('default') || $property->hasMeta('fixed')) {
-                $value = $property->hasMeta('fixed') ? $property->fixed : $property->default;
+                $rawValue = $property->hasMeta('fixed') ? $property->fixed : $property->default;
+                $value = $this->resolvePropertyValue($rawValue, $property);
 
                 if ($property->hasMeta('isYesNo') && $value !== null) {
                     $value = $value ? 'Yes' : 'No';
@@ -620,5 +623,27 @@ class Repository implements RepositoryInterface
         }
 
         return $defaults;
+    }
+
+    protected function resolvePropertyValue(mixed $value, $property): mixed
+    {
+        if (! is_callable($value)) {
+            return $value;
+        }
+
+        $attempts = [
+            fn () => $value($property),
+            fn () => $value(),
+        ];
+
+        foreach ($attempts as $attempt) {
+            try {
+                return $attempt();
+            } catch (ArgumentCountError|TypeError) {
+                // Try the next argument combination until one matches.
+            }
+        }
+
+        return $value;
     }
 }
