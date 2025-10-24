@@ -137,7 +137,12 @@ class Transformer implements Contract
                 $property->hasMeta('validationOnly') ||
                 $property->hasMeta('isRelation') ||
                 $property->hasMeta('calculated') ||
-                (!$force && $property->hasMeta('readonly'))
+                (
+                    !$force &&
+                    $property->hasMeta('readonly') &&
+                    ! $property->hasMeta('fixed') &&
+                    ! $property->hasMeta('default')
+                )
             ) {
                 continue;
             }
