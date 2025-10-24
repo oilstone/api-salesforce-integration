@@ -5,8 +5,10 @@ namespace Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers;
 use Api\Result\Contracts\Record;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer as Contract;
+use ArgumentCountError;
 use Carbon\Carbon;
 use Throwable;
+use TypeError;
 
 class Transformer implements Contract
 {
@@ -303,12 +305,21 @@ class Transformer implements Contract
             fn () => $value(),
         ];
 
+        $lastSignatureException = null;
+
         foreach ($attempts as $attempt) {
             try {
                 return $attempt();
-            } catch (Throwable) {
+            } catch (ArgumentCountError|TypeError $exception) {
+                $lastSignatureException = $exception;
                 // Try the next argument combination until one matches.
+            } catch (Throwable $exception) {
+                throw $exception;
             }
+        }
+
+        if ($lastSignatureException !== null) {
+            throw $lastSignatureException;
         }
 
         return $value;
