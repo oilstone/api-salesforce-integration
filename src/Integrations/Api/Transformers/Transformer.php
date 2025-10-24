@@ -252,6 +252,10 @@ class Transformer implements Contract
                 $value = ($property->afterReverse)($value, $attributes);
             }
 
+            if (! $force && $property->hasMeta('readonly') && $value === null) {
+                continue;
+            }
+
             $path = explode('.', $key);
             $current = &$reversed;
 
