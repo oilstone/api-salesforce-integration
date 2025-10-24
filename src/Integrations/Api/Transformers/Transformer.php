@@ -5,7 +5,9 @@ namespace Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers;
 use Api\Result\Contracts\Record;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer as Contract;
+use ArgumentCountError;
 use Carbon\Carbon;
+use TypeError;
 
 class Transformer implements Contract
 {
@@ -73,7 +75,7 @@ class Transformer implements Contract
             }
 
             if ($property->hasMeta('fixed')) {
-                $value = $property->fixed;
+                $value = $this->resolvePropertyValue($property->fixed, $property, $attributes);
             }
 
             if ($value) {
@@ -183,9 +185,9 @@ class Transformer implements Contract
                 }
 
                 if ($property->hasMeta('fixed') && !($force && $hasValue)) {
-                    $lineValue = $property->fixed;
+                    $lineValue = $this->resolvePropertyValue($property->fixed, $property, $attributes);
                 } elseif ($lineValue === null && $property->hasMeta('default')) {
-                    $lineValue = $property->default;
+                    $lineValue = $this->resolvePropertyValue($property->default, $property, $attributes);
                 }
 
                 if ($property->hasMeta('afterReverse') && is_callable($property->afterReverse)) {
@@ -208,9 +210,9 @@ class Transformer implements Contract
             }
 
             if ($property->hasMeta('fixed') && !($force && $hasValue)) {
-                $value = $property->fixed;
+                $value = $this->resolvePropertyValue($property->fixed, $property, $attributes);
             } elseif ($value === null && $property->hasMeta('default')) {
-                $value = $property->default;
+                $value = $this->resolvePropertyValue($property->default, $property, $attributes);
             }
 
             if ($property->hasMeta('isYesNo') && $value !== null) {
@@ -285,5 +287,29 @@ class Transformer implements Contract
         }
 
         return $reversed;
+    }
+
+    protected function resolvePropertyValue(mixed $value, $property, array $attributes = []): mixed
+    {
+        if (! is_callable($value)) {
+            return $value;
+        }
+
+        $attempts = [
+            fn () => $value($attributes, $property),
+            fn () => $value($attributes),
+            fn () => $value($property),
+            fn () => $value(),
+        ];
+
+        foreach ($attempts as $attempt) {
+            try {
+                return $attempt();
+            } catch (ArgumentCountError|TypeError) {
+                // Try the next argument combination until one matches.
+            }
+        }
+
+        return $value;
     }
 }
