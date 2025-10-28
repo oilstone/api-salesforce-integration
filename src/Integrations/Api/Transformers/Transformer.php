@@ -150,18 +150,20 @@ class Transformer implements Contract
             if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
                 $key = $property->getName();
 
-                if (! array_key_exists($key, $attributes) && ! $force && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
+                if (! array_key_exists($key, $attributes) && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
                     continue;
                 }
 
                 $value = $attributes[$key] ?? [];
 
-                if (is_array($value)) {
-                    $nested = $this->reverseSchema($property->getAccepts(), $value, $force);
+                if (! is_array($value)) {
+                    $value = [];
+                }
 
-                    if ($nested !== []) {
-                        $reversed = array_replace_recursive($reversed, $nested);
-                    }
+                $nested = $this->reverseSchema($property->getAccepts(), $value, $force);
+
+                if ($nested !== []) {
+                    $reversed = array_replace_recursive($reversed, $nested);
                 }
 
                 continue;
@@ -171,7 +173,7 @@ class Transformer implements Contract
 
             $hasValue = array_key_exists($property->getName(), $attributes) || array_key_exists($key, $attributes);
 
-            if (! $hasValue && ! $force && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
+            if (! $hasValue && ! $property->hasMeta('fixed') && ! $property->hasMeta('default')) {
                 continue;
             }
 
