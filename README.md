@@ -35,7 +35,7 @@ If your project uses Laravel you can register the service provider and publish t
 php artisan vendor:publish --tag=config --provider="Oilstone\\ApiSalesforceIntegration\\Integrations\\Laravel\\ServiceProvider"
 ```
 
-Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger. Queries served from the cache are also logged with a `cache` flag so they can be distinguished from live requests.
+Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger. Queries served from the cache are also logged with a `cache` flag so they can be distinguished from live requests. When the package is resolved inside an Artisan command, scheduler task or queued job the query cache is still populated but lookups default to the live API to avoid stale data in long-running console processes.
 
 When authenticating with the client credentials grant you must supply at least one OAuth scope. Set the `SALESFORCE_SCOPES` environment variable to a comma separated list (or define the `scopes` array in the published configuration) and the service provider will include them in the token request.
 
