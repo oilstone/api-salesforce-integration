@@ -8,6 +8,7 @@ use Psr\SimpleCache\CacheInterface;
 class QueryCacheHandler
 {
     protected string $prefix = 'salesforce.query.';
+    protected bool $skipRetrievalByDefault = false;
 
     public function __construct(
         protected CacheInterface $cache,
@@ -25,6 +26,13 @@ class QueryCacheHandler
     public function setTtl(?int $ttl): static
     {
         $this->ttl = $ttl;
+        return $this;
+    }
+
+    public function skipRetrievalByDefault(bool $skip = true): static
+    {
+        $this->skipRetrievalByDefault = $skip;
+
         return $this;
     }
 
@@ -57,7 +65,11 @@ class QueryCacheHandler
             }
         }
 
-        if (! ($options['skip_cache'] ?? false) && $cache->has($key)) {
+        $skipCache = array_key_exists('skip_cache', $options)
+            ? (bool) $options['skip_cache']
+            : $this->skipRetrievalByDefault;
+
+        if (! $skipCache && $cache->has($key)) {
             $value = $cache->get($key);
             if (is_array($value)) {
                 if ($options['log_request'] ?? false) {
