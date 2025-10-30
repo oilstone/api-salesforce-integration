@@ -58,7 +58,7 @@ class Resource extends BaseResource
             $handler = clone $this->cacheHandler;
 
             if ($this->cacheTtl !== null) {
-                $handler->setTtl($this->cacheTtl);
+                $handler->setQueryTtl($this->cacheTtl);
             }
 
             $repository->setCacheHandler($handler);

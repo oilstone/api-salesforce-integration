@@ -94,7 +94,7 @@ class Salesforce
         );
 
         if ($this->cacheHandler) {
-            return $this->cacheHandler->remember('DESCRIBE '.$object, $callback, [$object], $options);
+            return $this->cacheHandler->rememberQuery('DESCRIBE '.$object, $callback, $options);
         }
 
         return $callback();
@@ -110,7 +110,9 @@ class Salesforce
             $options,
         );
 
-        $data = $this->cacheHandler ? $this->cacheHandler->remember('PICKLIST_VALUES '.$object.'_'.$recordTypeId.'_'.$field, $callback, [$object, $recordTypeId, $field], $options) : $callback();
+        $data = $this->cacheHandler
+            ? $this->cacheHandler->rememberQuery('PICKLIST_VALUES '.$object.'_'.$recordTypeId.'_'.$field, $callback, $options)
+            : $callback();
 
         return array_values(array_map(
             fn ($v) => html_entity_decode($v['value'], ENT_QUOTES | ENT_HTML5),

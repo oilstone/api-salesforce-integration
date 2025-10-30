@@ -76,10 +76,6 @@ class Repository
 
         if ($this->cacheHandler) {
             $query->setCacheHandler($this->cacheHandler);
-            $query->setCacheTags([
-                $object ?? $this->object,
-                ($object ?? $this->object) . ':findMany',
-            ]);
         }
 
         foreach ($this->defaultConstraints as $constraint) {
@@ -169,13 +165,6 @@ class Repository
         if ($id !== null) {
             $query->where($this->defaultIdentifier, $id);
 
-            if ($this->cacheHandler) {
-                $query->setCacheTags([
-                    $this->object,
-                    $this->object.':'.$id,
-                    $this->object.':findOne',
-                ]);
-            }
         }
 
         foreach ($conditions as $field => $value) {
@@ -302,9 +291,7 @@ class Repository
         $result = $this->getClient()->create($this->object, $payload);
 
         if ($this->cacheHandler) {
-            $this->cacheHandler->flush([
-                $this->object . ':findMany',
-            ]);
+            $this->cacheHandler->flushQueryCache();
         }
 
         return array_merge($payload, $result ?? []);
@@ -318,9 +305,9 @@ class Repository
         $result = $this->getClient()->update($this->object, $id, $payload, $this->defaultIdentifier);
 
         if ($this->cacheHandler) {
-            $this->cacheHandler->flush([
-                $this->object . ':findMany',
-                $this->object . ':' . $id,
+            $this->cacheHandler->flushQueryCache();
+            $this->cacheHandler->forgetEntryByConditions($this->object, [
+                $this->defaultIdentifier => $id,
             ]);
         }
 
@@ -332,9 +319,9 @@ class Repository
         $result = $this->getClient()->delete($this->object, $id, $this->defaultIdentifier);
 
         if ($this->cacheHandler) {
-            $this->cacheHandler->flush([
-                $this->object . ':findMany',
-                $this->object . ':' . $id,
+            $this->cacheHandler->flushQueryCache();
+            $this->cacheHandler->forgetEntryByConditions($this->object, [
+                $this->defaultIdentifier => $id,
             ]);
         }
 

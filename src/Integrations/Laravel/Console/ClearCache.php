@@ -2,44 +2,39 @@
 
 namespace Oilstone\ApiSalesforceIntegration\Integrations\Laravel\Console;
 
-use Illuminate\Cache\TaggableStore;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Cache;
+use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 
 class ClearCache extends Command
 {
-    protected $signature = 'salesforce:cache:clear {resource} {id?}';
+    protected $signature = 'salesforce:cache:clear {resource} {id?} {--field=Id}';
 
-    protected $description = 'Clear Salesforce query cache by tag';
+    protected $description = 'Clear Salesforce cache entries';
 
     public function handle(): int
     {
-        $resource = $this->argument('resource');
+        /** @var QueryCacheHandler $handler */
+        $handler = app(QueryCacheHandler::class);
+
+        $resource = (string) $this->argument('resource');
         $id = $this->argument('id');
+        $field = (string) $this->option('field');
 
-        $store = Cache::store();
-
-        if (! method_exists($store, 'tags') || ! ($store->getStore() instanceof TaggableStore)) {
-            $this->error('Cache store does not support tagging.');
-            return 1;
-        }
+        $handler->flushQueryCache();
 
         if ($id) {
-            $tags = [
-                $resource . ':' . $id,
-                $resource . ':findMany',
-            ];
-        } else {
-            $tags = [
+            $handler->forgetEntryByConditions($resource, [$field => $id]);
+            $this->info(sprintf(
+                'Cleared query cache and entry cache for %s where %s = %s.',
                 $resource,
-                $resource . ':findMany',
-                $resource . ':findOne',
-            ];
+                $field,
+                $id
+            ));
+
+            return 0;
         }
 
-        Cache::tags($tags)->flush();
-
-        $this->info('Cache cleared for: ' . implode(', ', $tags));
+        $this->info(sprintf('Cleared query cache for %s queries.', $resource));
 
         return 0;
     }
