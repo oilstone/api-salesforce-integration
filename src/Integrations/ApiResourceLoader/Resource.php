@@ -3,10 +3,13 @@
 namespace Oilstone\ApiSalesforceIntegration\Integrations\ApiResourceLoader;
 
 use Api\Guards\OAuth2\Sentinel;
+use Illuminate\Container\Container as IlluminateContainer;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Transformer;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository;
 use Oilstone\ApiResourceLoader\Resources\Resource as BaseResource;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
+use Psr\Container\ContainerInterface;
+use Throwable;
 
 class Resource extends BaseResource
 {
@@ -26,8 +29,18 @@ class Resource extends BaseResource
 
     protected ?QueryCacheHandler $cacheHandler = null;
 
+    protected bool $cacheHandlerManuallySet = false;
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        $this->initialiseCacheHandlerFromContainer();
+    }
+
     public function setCacheHandler(?QueryCacheHandler $handler): static
     {
+        $this->cacheHandlerManuallySet = true;
         $this->cacheHandler = $handler;
 
         return $this;
@@ -35,6 +48,10 @@ class Resource extends BaseResource
 
     public function getCacheHandler(): ?QueryCacheHandler
     {
+        if (! $this->cacheHandlerManuallySet && ! $this->cacheHandler instanceof QueryCacheHandler) {
+            $this->initialiseCacheHandlerFromContainer();
+        }
+
         return $this->cacheHandler;
     }
 
@@ -54,8 +71,10 @@ class Resource extends BaseResource
             ->setDefaultIncludes(array_merge($this->includes(), $this->includes))
             ->setIdentifier($this->identifier);
 
-        if (method_exists($repository, 'setCacheHandler') && $this->cacheHandler) {
-            $handler = clone $this->cacheHandler;
+        $cacheHandler = $this->getCacheHandler();
+
+        if (method_exists($repository, 'setCacheHandler') && $cacheHandler) {
+            $handler = clone $cacheHandler;
 
             if ($this->cacheTtl !== null) {
                 $handler->setQueryTtl($this->cacheTtl);
@@ -131,5 +150,108 @@ class Resource extends BaseResource
         $this->cacheTtl = $ttl;
 
         return $this;
+    }
+
+    protected function initialiseCacheHandlerFromContainer(): void
+    {
+        if ($this->cacheHandlerManuallySet || $this->cacheHandler instanceof QueryCacheHandler) {
+            return;
+        }
+
+        $handler = $this->resolveCacheHandlerFromContainer();
+
+        if ($handler instanceof QueryCacheHandler) {
+            $this->cacheHandler = $handler;
+        }
+    }
+
+    protected function resolveCacheHandlerFromContainer(): ?QueryCacheHandler
+    {
+        if ($handler = $this->resolveCacheHandlerViaHelper()) {
+            return $handler;
+        }
+
+        $container = $this->resolveContainerInstance();
+
+        if (! $container) {
+            return null;
+        }
+
+        return $this->resolveHandlerFromContainer($container);
+    }
+
+    protected function resolveCacheHandlerViaHelper(): ?QueryCacheHandler
+    {
+        if (! function_exists('app')) {
+            return null;
+        }
+
+        try {
+            $resolved = app(QueryCacheHandler::class);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $resolved instanceof QueryCacheHandler ? clone $resolved : null;
+    }
+
+    protected function resolveContainerInstance(): ?object
+    {
+        if (class_exists(IlluminateContainer::class)) {
+            $instance = IlluminateContainer::getInstance();
+
+            if ($instance) {
+                return $instance;
+            }
+        }
+
+        if (function_exists('app')) {
+            try {
+                $app = app();
+
+                if (is_object($app)) {
+                    return $app;
+                }
+            } catch (Throwable) {
+                // Ignore helpers that are not ready yet.
+            }
+        }
+
+        return null;
+    }
+
+    protected function resolveHandlerFromContainer(object $container): ?QueryCacheHandler
+    {
+        try {
+            if ($container instanceof ContainerInterface) {
+                if (! $container->has(QueryCacheHandler::class)) {
+                    return null;
+                }
+
+                $resolved = $container->get(QueryCacheHandler::class);
+            } elseif (method_exists($container, 'bound') && method_exists($container, 'make')) {
+                if (! $container->bound(QueryCacheHandler::class)) {
+                    return null;
+                }
+
+                $resolved = $container->make(QueryCacheHandler::class);
+            } elseif (method_exists($container, 'has') && method_exists($container, 'get')) {
+                if (! $container->has(QueryCacheHandler::class)) {
+                    return null;
+                }
+
+                $resolved = $container->get(QueryCacheHandler::class);
+            } elseif (method_exists($container, 'get')) {
+                $resolved = $container->get(QueryCacheHandler::class);
+            } elseif (method_exists($container, 'make')) {
+                $resolved = $container->make(QueryCacheHandler::class);
+            } else {
+                return null;
+            }
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $resolved instanceof QueryCacheHandler ? clone $resolved : null;
     }
 }
