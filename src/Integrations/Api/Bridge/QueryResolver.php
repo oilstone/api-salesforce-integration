@@ -20,12 +20,6 @@ class QueryResolver
     {
         $query = $this->keyedQuery();
 
-        $query->setCacheTags([
-            $query->getObject(),
-            $query->getObject() . ':' . $this->pipe->getKey(),
-            $query->getObject() . ':findOne',
-        ]);
-
         return (new Query($query))
             ->select($this->defaultFields ?: ['FIELDS(ALL)'])
             ->first();

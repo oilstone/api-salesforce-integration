@@ -19,7 +19,6 @@ class Query
 
     protected array $relationships = [];
 
-
     protected array $conditions = [];
 
     protected array $orders = [];
@@ -29,8 +28,6 @@ class Query
     protected ?int $offset = null;
 
     protected ?QueryCacheHandler $cacheHandler = null;
-
-    protected array $cacheTags = [];
 
     protected array $cacheOptions = [];
 
@@ -49,23 +46,11 @@ class Query
         return $this;
     }
 
-    public function setCacheTags(array $tags): static
-    {
-        $this->cacheTags = $tags;
-
-        return $this;
-    }
-
     public function setCacheOptions(array $options): static
     {
         $this->cacheOptions = $options;
 
         return $this;
-    }
-
-    public function getCacheTags(): array
-    {
-        return $this->cacheTags;
     }
 
     public static function make(string $object, Salesforce $client, string $identifier = 'Id'): static
@@ -293,7 +278,7 @@ class Query
         $options = array_merge(['log_request' => true], $this->cacheOptions);
 
         $results = $this->cacheHandler
-            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, $options)
+            ? $this->cacheHandler->rememberQuery($soql, $callback, $options)
             : $callback();
 
         return $results;
@@ -301,9 +286,22 @@ class Query
 
     public function first(): ?array
     {
-        $result = $this->limit(1)->get();
+        $this->limit(1);
+        $soql = $this->toSoql();
 
-        return $result[0] ?? null;
+        $callback = function () use ($soql) {
+            $results = $this->client->query($soql);
+
+            return $results[0] ?? null;
+        };
+
+        $options = array_merge(['log_request' => true], $this->cacheOptions);
+
+        $result = $this->cacheHandler
+            ? $this->cacheHandler->rememberEntry($this, $soql, $callback, $options)
+            : $callback();
+
+        return $result ?? null;
     }
 
     public function pluck(string $column, ?string $index = null): array
@@ -360,10 +358,61 @@ class Query
         $options = array_merge(['log_request' => true], $this->cacheOptions);
 
         $result = $this->cacheHandler
-            ? $this->cacheHandler->remember($soql, $callback, $this->cacheTags, $options)
+            ? $this->cacheHandler->rememberQuery($soql, $callback, $options)
             : $callback();
 
         return $result['totalSize'] ?? 0;
+    }
+
+    public function getConditions(): array
+    {
+        return $this->conditions;
+    }
+
+    public function getConditionSignature(): array
+    {
+        return $this->mapConditionsForSignature($this->conditions);
+    }
+
+    public function getOrders(): array
+    {
+        return $this->orders;
+    }
+
+    public function getLimit(): ?int
+    {
+        return $this->limit;
+    }
+
+    public function getOffset(): ?int
+    {
+        return $this->offset;
+    }
+
+    protected function mapConditionsForSignature(array $conditions): array
+    {
+        return array_map(function (array $condition) {
+            $signature = [
+                'boolean' => $condition['boolean'],
+                'type' => $condition['type'],
+            ];
+
+            if ($condition['type'] === 'nested') {
+                $signature['conditions'] = $this->mapConditionsForSignature($condition['conditions']);
+                return $signature;
+            }
+
+            $signature['field'] = $condition['field'];
+            $signature['operator'] = $condition['operator'];
+
+            if ($condition['type'] === 'in') {
+                $signature['values'] = $condition['values'];
+            } else {
+                $signature['value'] = $condition['value'];
+            }
+
+            return $signature;
+        }, $conditions);
     }
 
     protected function toSoql(): string

@@ -39,18 +39,33 @@ Configure your Salesforce instance in `config/salesforce.php` and the provider w
 
 When authenticating with the client credentials grant you must supply at least one OAuth scope. Set the `SALESFORCE_SCOPES` environment variable to a comma separated list (or define the `scopes` array in the published configuration) and the service provider will include them in the token request.
 
-If the cache store supports tagging, query results are tagged by the Salesforce object name. Collection queries receive an additional `<object>:findMany` tag while single-record queries are tagged with `<object>:findOne`. When fetching by ID the record tag `<object>:<id>` is also applied. You can clear cached results using the provided Artisan command:
+The package divides caching into two layers via `QueryCacheHandler`:
+
+* **Query cache** entries persist the results of SOQL queries for a short TTL.
+  The SOQL string itself is hashed to generate the cache key and a single
+  `flushQueryCache` method clears every cached query in one call.
+* **Entry cache** entries store individual records for a longer TTL. Keys are
+  derived from the queried object's conditions, ensuring `find`, `first` and
+  similar operations can reuse cached records. Entry cache items can be
+  removed on demand by passing the same conditions back to the handler.
+
+Use the Artisan command to clear caches:
 
 ```bash
-php artisan salesforce:cache:clear Account
+php artisan salesforce:cache:clear Account              # Flushes all query cache entries
 php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX
+php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX --field=External_Id__c
 ```
 
-Cached results for a specific record are automatically cleared when the
-repository's `update` or `delete` methods are used with a configured
-`QueryCacheHandler`. The record tag `<object>:<id>` and any list caches tagged
-with `<object>:findMany` are flushed so collection results stay in sync. Newly
-created records trigger only the `<object>:findMany` flush.
+Supplying an ID (and optionally an alternate field) clears both the query
+cache and the targeted entry cache for that record. Repository `create`,
+`update` and `delete` operations automatically flush the query cache, and
+updates/deletions evict the related entry cache entry so fresh data is fetched
+next time.
+
+Default TTLs can be configured via the `SALESFORCE_QUERY_CACHE_DEFAULT_TTL`
+and `SALESFORCE_ENTRY_CACHE_DEFAULT_TTL` environment variables (or their
+respective `salesforce.php` configuration values).
 
 Object descriptions fetched via the client are also cached through the same
 handler, preventing repetitive calls to Salesforce's `describe` endpoint.

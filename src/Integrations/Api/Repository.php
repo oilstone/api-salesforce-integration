@@ -111,12 +111,6 @@ class Repository implements RepositoryInterface
         $object = $request->getQueryParams()['object'] ?? null;
         $query = $this->newQuery($object);
 
-        $query->setCacheTags([
-            $object ?? $this->object,
-            ($object ?? $this->object) . ':' . $pipe->getKey(),
-            ($object ?? $this->object) . ':findOne',
-        ]);
-
         return (new QueryResolver($query, $pipe, $this->getDefaultFields()))->record($request);
     }
 

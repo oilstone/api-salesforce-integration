@@ -22,8 +22,12 @@ class ServiceProvider extends BaseServiceProvider
             $cache = $app->make('cache.store');
             $logger = ! empty($config['debug']) ? Log::channel() : null;
 
-            return (new QueryCacheHandler($cache, $config['query_cache_default_ttl'], $logger))
-                ->skipRetrievalByDefault($app->runningInConsole());
+            return (new QueryCacheHandler(
+                $cache,
+                $config['query_cache_default_ttl'],
+                $config['entry_cache_default_ttl'],
+                $logger
+            ))->skipRetrievalByDefault($app->runningInConsole());
         });
 
         $this->app->singleton(Salesforce::class, function () use ($config) {
