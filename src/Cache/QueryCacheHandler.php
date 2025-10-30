@@ -11,6 +11,7 @@ class QueryCacheHandler
     protected string $queryPrefix = 'salesforce.query.';
     protected string $entryPrefix = 'salesforce.entry.';
     protected string $queryNamespaceKey = 'salesforce.query.namespace';
+    protected string $entryIndexPrefix = 'salesforce.entry_index.';
 
     protected bool $skipRetrievalByDefault = false;
 
@@ -74,6 +75,12 @@ class QueryCacheHandler
             return $callback();
         }
 
+        $indexableConditions = $this->extractEntryIndexConditions($signature);
+
+        if ($indexableConditions === []) {
+            return $callback();
+        }
+
         $cacheKey = $this->buildEntryCacheKey($query->getObject(), $signature);
 
         return $this->rememberWithCache(
@@ -86,7 +93,13 @@ class QueryCacheHandler
             [
                 'object' => $query->getObject(),
                 'conditions' => $signature,
-            ]
+            ],
+            function () use ($query, $indexableConditions, $cacheKey): void {
+                $this->registerEntryIndex($query->getObject(), $indexableConditions, $cacheKey);
+            },
+            function () use ($query, $indexableConditions, $cacheKey): void {
+                $this->registerEntryIndex($query->getObject(), $indexableConditions, $cacheKey);
+            }
         );
     }
 
@@ -98,9 +111,32 @@ class QueryCacheHandler
             return;
         }
 
-        $cacheKey = $this->buildEntryCacheKey($object, $signature);
+        $indexableConditions = $this->extractEntryIndexConditions($signature);
 
-        $this->cache->delete($cacheKey);
+        if ($indexableConditions === []) {
+            return;
+        }
+
+        $keysToDelete = [];
+
+        foreach ($indexableConditions as $field => $values) {
+            foreach ($values as $value) {
+                $indexKey = $this->buildEntryIndexKey($object, $field, $value);
+                $cacheKeys = $this->cache->get($indexKey);
+
+                if (is_array($cacheKeys)) {
+                    foreach ($cacheKeys as $cacheKey) {
+                        $keysToDelete[$cacheKey] = true;
+                    }
+                }
+
+                $this->cache->delete($indexKey);
+            }
+        }
+
+        foreach (array_keys($keysToDelete) as $cacheKey) {
+            $this->cache->delete($cacheKey);
+        }
     }
 
     public function flushQueryCache(): void
@@ -115,7 +151,9 @@ class QueryCacheHandler
         array $options,
         string $type,
         ?string $originalKey = null,
-        array $context = []
+        array $context = [],
+        ?callable $onCacheHit = null,
+        ?callable $onCacheStore = null
     ): mixed {
         $skipCache = array_key_exists('skip_cache', $options)
             ? (bool) $options['skip_cache']
@@ -123,6 +161,10 @@ class QueryCacheHandler
 
         if (! $skipCache && $this->cache->has($cacheKey)) {
             $value = $this->cache->get($cacheKey);
+
+            if ($onCacheHit) {
+                $onCacheHit();
+            }
 
             if ($options['log_request'] ?? false) {
                 $this->log($originalKey ?? $cacheKey, $value, $type, $context);
@@ -134,6 +176,10 @@ class QueryCacheHandler
         $value = $callback();
 
         $this->cache->set($cacheKey, $value, $ttl);
+
+        if ($onCacheStore) {
+            $onCacheStore();
+        }
 
         if ($options['log_request'] ?? false) {
             $this->log($originalKey ?? $cacheKey, $value, $type, $context);
@@ -179,6 +225,15 @@ class QueryCacheHandler
         ], JSON_THROW_ON_ERROR));
     }
 
+    protected function buildEntryIndexKey(string $object, string $field, mixed $value): string
+    {
+        return $this->entryIndexPrefix . md5(json_encode([
+            'object' => $object,
+            'field' => $field,
+            'value' => $this->normaliseValue($value),
+        ], JSON_THROW_ON_ERROR));
+    }
+
     protected function getQueryNamespace(): string
     {
         $namespace = $this->cache->get($this->queryNamespaceKey);
@@ -198,6 +253,95 @@ class QueryCacheHandler
         } catch (\Throwable $exception) {
             return (string) microtime(true);
         }
+    }
+
+    protected function extractEntryIndexConditions(array $signature): array
+    {
+        $conditions = [];
+
+        foreach ($signature as $condition) {
+            if (! is_array($condition) || ! isset($condition['type'])) {
+                continue;
+            }
+
+            if ($condition['type'] === 'nested') {
+                $nested = $this->extractEntryIndexConditions($condition['conditions'] ?? []);
+
+                foreach ($nested as $field => $values) {
+                    $conditions[$field] = array_merge($conditions[$field] ?? [], $values);
+                }
+
+                continue;
+            }
+
+            if (! isset($condition['field'])) {
+                continue;
+            }
+
+            if ($condition['type'] === 'basic' && ($condition['operator'] ?? null) === '=') {
+                $conditions[$condition['field']][] = $condition['value'] ?? null;
+                continue;
+            }
+
+            if ($condition['type'] === 'in') {
+                foreach (($condition['values'] ?? []) as $value) {
+                    $conditions[$condition['field']][] = $value;
+                }
+            }
+        }
+
+        foreach ($conditions as $field => $values) {
+            $normalised = [];
+
+            foreach ($values as $value) {
+                $normalised[] = $this->normaliseValue($value);
+            }
+
+            $conditions[$field] = array_values(array_unique($normalised, SORT_REGULAR));
+        }
+
+        return $conditions;
+    }
+
+    protected function registerEntryIndex(string $object, array $conditions, string $cacheKey): void
+    {
+        foreach ($conditions as $field => $values) {
+            foreach ($values as $value) {
+                $indexKey = $this->buildEntryIndexKey($object, $field, $value);
+                $cacheKeys = $this->cache->get($indexKey);
+
+                if (! is_array($cacheKeys)) {
+                    $cacheKeys = [];
+                }
+
+                if (! in_array($cacheKey, $cacheKeys, true)) {
+                    $cacheKeys[] = $cacheKey;
+                }
+
+                $this->cache->set($indexKey, $cacheKeys, $this->entryTtl);
+            }
+        }
+    }
+
+    protected function normaliseValue(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return $this->normaliseArray($value);
+        }
+
+        if (is_object($value)) {
+            if ($value instanceof \DateTimeInterface) {
+                return $value->format(\DateTimeInterface::ATOM);
+            }
+
+            if (method_exists($value, '__toString')) {
+                return (string) $value;
+            }
+
+            return serialize($value);
+        }
+
+        return $value;
     }
 
     protected function normaliseConditionsInput(array $conditions): array
