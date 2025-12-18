@@ -119,7 +119,7 @@ class Repository implements RepositoryInterface
         $object = $request->getQueryParams()['object'] ?? null;
         $repository = $this->repository($object);
 
-        $fields = $this->reverseAttributes($request->getParsedBody()->toArray(), true);
+        $fields = $this->reverseAttributes($request->getParsedBody()?->toArray() ?? [], true);
 
         $result = $repository->create($fields);
 
@@ -135,7 +135,7 @@ class Repository implements RepositoryInterface
 
         $id = $pipe->getKey();
 
-        $fields = $this->reverseAttributes($request->getParsedBody()->toArray(), true);
+        $fields = $this->reverseAttributes($request->getParsedBody()?->toArray() ?? [], true);
 
         $this->repository($object)->update($id, $fields);
 
