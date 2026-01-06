@@ -314,6 +314,35 @@ class Repository
         return array_merge($payload, [$this->defaultIdentifier => $id], $result ?? []);
     }
 
+    public function upsertRecord(string $identifierValue, array $attributes, ?string $identifier = null): array
+    {
+        $payload = array_replace_recursive($this->defaultValues, $attributes);
+        $payload = $this->filterNullDefaults($payload, $attributes);
+
+        $identifier ??= $this->defaultIdentifier;
+
+        $result = $this->getClient()->upsert($this->object, $identifierValue, $payload, $identifier);
+
+        if ($this->cacheHandler) {
+            $this->cacheHandler->flushQueryCache();
+            $this->cacheHandler->forgetEntryByConditions($this->object, [
+                $identifier => $identifierValue,
+            ]);
+
+            if ($identifier !== $this->defaultIdentifier) {
+                $defaultIdentifierValue = $payload[$this->defaultIdentifier] ?? $result[$this->defaultIdentifier] ?? $result['id'] ?? null;
+
+                if ($defaultIdentifierValue !== null) {
+                    $this->cacheHandler->forgetEntryByConditions($this->object, [
+                        $this->defaultIdentifier => $defaultIdentifierValue,
+                    ]);
+                }
+            }
+        }
+
+        return array_merge($payload, [$identifier => $identifierValue], $result ?? []);
+    }
+
     public function upsert(array $conditions, array $attributes): array
     {
         $existing = $this->first($conditions);
