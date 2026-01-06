@@ -314,6 +314,17 @@ class Repository
         return array_merge($payload, [$this->defaultIdentifier => $id], $result ?? []);
     }
 
+    public function upsert(array $conditions, array $attributes): array
+    {
+        $existing = $this->first($conditions);
+
+        if ($existing) {
+            return $this->update($existing[$this->defaultIdentifier], $attributes);
+        }
+
+        return $this->create(array_replace_recursive($attributes, $conditions));
+    }
+
     public function delete(string $id): array
     {
         $result = $this->getClient()->delete($this->object, $id, $this->defaultIdentifier);
