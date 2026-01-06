@@ -328,6 +328,16 @@ class Repository
             $this->cacheHandler->forgetEntryByConditions($this->object, [
                 $identifier => $identifierValue,
             ]);
+
+            if ($identifier !== $this->defaultIdentifier) {
+                $defaultIdentifierValue = $payload[$this->defaultIdentifier] ?? $result[$this->defaultIdentifier] ?? $result['id'] ?? null;
+
+                if ($defaultIdentifierValue !== null) {
+                    $this->cacheHandler->forgetEntryByConditions($this->object, [
+                        $this->defaultIdentifier => $defaultIdentifierValue,
+                    ]);
+                }
+            }
         }
 
         return array_merge($payload, [$identifier => $identifierValue], $result ?? []);
