@@ -144,6 +144,11 @@ class Salesforce
         ]);
     }
 
+    public function upsert(string $object, string $identifierValue, array $payload, string $identifier = 'Id'): array
+    {
+        return $this->update($object, $identifierValue, $payload, $identifier);
+    }
+
     public function delete(string $object, string $id, string $identifier = 'Id'): array
     {
         $url = $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/sobjects/'.trim($object, '/');
