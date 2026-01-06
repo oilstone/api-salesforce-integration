@@ -6,7 +6,7 @@ A lightweight integration for interacting with Salesforce from PHP. The package 
 
 - **Salesforce HTTP client** built on Guzzle with convenience helpers for common endpoints.
 - **Fluent SOQL query builder** supporting nested conditions, `IN` clauses, ordering, limits and relationship includes.
-- **Repository layer** exposing `find`, `first`, `get`, `create`, `update` and `delete` methods for Salesforce objects.
+- **Repository layer** exposing `find`, `first`, `get`, `create`, `update`, `upsert`, `upsertRecord` and `delete` methods for Salesforce objects.
 - **Integration with garethhudson07/api** through repository and query bridge classes and a data transformer so that resources defined in that package can query Salesforce seamlessly.
 - **Laravel support** including a service provider for obtaining and caching OAuth tokens and optional request logging.
 - **Lookup utilities** for retrieving and caching pick list values.
@@ -59,9 +59,9 @@ php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX --field=External_I
 
 Supplying an ID (and optionally an alternate field) clears both the query
 cache and the targeted entry cache for that record. Repository `create`,
-`update` and `delete` operations automatically flush the query cache, and
-updates/deletions evict the related entry cache entry so fresh data is fetched
-next time.
+`update`, `upsertRecord` and `delete` operations automatically flush the query
+cache, and updates/upserts/deletions evict the related entry cache entry so
+fresh data is fetched next time.
 
 Default TTLs can be configured via the `SALESFORCE_QUERY_CACHE_DEFAULT_TTL`
 and `SALESFORCE_ENTRY_CACHE_DEFAULT_TTL` environment variables (or their
