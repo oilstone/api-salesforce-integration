@@ -294,7 +294,13 @@ class Repository
             $this->cacheHandler->flushQueryCache();
         }
 
-        return array_merge($payload, $result ?? []);
+        $recordId = $result['id'] ?? null;
+
+        if ($recordId === null) {
+            return array_merge($payload, $result ?? []);
+        }
+
+        return $this->findOrFail(['Id' => $recordId]);
     }
 
     public function update(string $id, array $attributes): array
@@ -311,7 +317,7 @@ class Repository
             ]);
         }
 
-        return array_merge($payload, [$this->defaultIdentifier => $id], $result ?? []);
+        return $this->findOrFail([$this->defaultIdentifier => $id]);
     }
 
     public function upsertRecord(string $identifierValue, array $attributes, ?string $identifier = null): array
@@ -340,7 +346,7 @@ class Repository
             }
         }
 
-        return array_merge($payload, [$identifier => $identifierValue], $result ?? []);
+        return $this->findOrFail([$identifier => $identifierValue]);
     }
 
     public function upsert(array $conditions, array $attributes): array
@@ -387,9 +393,7 @@ class Repository
             return $record;
         }
 
-        $result = $this->create(array_merge($attributes, $extra));
-
-        return $this->findOrFail(['Id' => $result['id']]);
+        return $this->create(array_merge($attributes, $extra));
     }
 
     public function updateOrCreate(array $attributes, array $values = []): array
@@ -403,13 +407,10 @@ class Repository
         $record = $this->applyOptions($query, ['select' => [$this->defaultIdentifier]])->first();
 
         if ($record) {
-            $this->update($record[$this->defaultIdentifier], $values);
-            return $this->findOrFail($record[$this->defaultIdentifier]);
+            return $this->update($record[$this->defaultIdentifier], $values);
         }
 
-        $result = $this->create(array_merge($attributes, $values));
-
-        return $this->findOrFail(['Id' => $result['id']]);
+        return $this->create(array_merge($attributes, $values));
     }
 
     protected function isOptionsArray(array $data): bool

@@ -121,9 +121,7 @@ class Repository implements RepositoryInterface
 
         $fields = $this->reverseAttributes($request->getParsedBody()?->toArray() ?? [], true);
 
-        $result = $repository->create($fields);
-
-        $record = $repository->findOrFail(['Id' => $result['id']]);
+        $record = $repository->create($fields);
 
         return ApiResultRecord::make($record);
     }
@@ -137,9 +135,7 @@ class Repository implements RepositoryInterface
 
         $fields = $this->reverseAttributes($request->getParsedBody()?->toArray() ?? [], true);
 
-        $this->repository($object)->update($id, $fields);
-
-        $record = $repository->findOrFail($id);
+        $record = $repository->update($id, $fields);
 
         return ApiResultRecord::make($record);
     }
@@ -163,9 +159,7 @@ class Repository implements RepositoryInterface
     {
         $fields = $this->reverseAttributes($attributes, true);
 
-        $result = $this->repository($object)->create($fields);
-
-        $record = $this->repository($object)->findOrFail(['Id' => $result['id']]);
+        $record = $this->repository($object)->create($fields);
 
         return $this->transformRecord($record);
     }
@@ -177,9 +171,7 @@ class Repository implements RepositoryInterface
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
-        $result = $this->repository($object)->create($fields);
-
-        $record = $this->repository($object)->findOrFail(['Id' => $result['id']]);
+        $record = $this->repository($object)->create($fields);
 
         return $this->transformRecord($record);
     }
@@ -192,9 +184,9 @@ class Repository implements RepositoryInterface
     {
         $fields = $this->reverseAttributes($attributes, true);
 
-        $this->repository($object)->update($id, $fields);
+        $record = $this->repository($object)->update($id, $fields);
 
-        return $this->findRecordOrFail($id, [], $object);
+        return $this->transformRecord($record);
     }
 
     /**
@@ -204,9 +196,9 @@ class Repository implements RepositoryInterface
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
-        $this->repository($object)->update($id, $fields);
+        $record = $this->repository($object)->update($id, $fields);
 
-        return $this->findRecordOrFail($id, [], $object);
+        return $this->transformRecord($record);
     }
 
     /**
