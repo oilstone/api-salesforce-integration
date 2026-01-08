@@ -15,4 +15,9 @@ class RecordCollection extends Set
     {
         return array_map(fn (Record $record) => $record->toArray(), $this->all());
     }
+
+    public function isEmpty(): bool
+    {
+        return empty($this->items);
+    }
 }
