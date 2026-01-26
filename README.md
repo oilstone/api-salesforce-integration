@@ -146,6 +146,22 @@ $facilityRepo = $accountRepo->freshRepository('Museum_Facility__c');
 
 The returned repository is clean and can be configured independently.
 
+## Apex REST requests
+
+Some Salesforce integrations expose Apex REST endpoints under
+`/services/apexrest`. Use the `apexRest` helper on the client to call these
+resources directly:
+
+```php
+use GuzzleHttp\Client;
+use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
+
+$http = new Client();
+$salesforce = new Salesforce($http, $instanceUrl, $accessToken);
+
+$paymentMethods = $salesforce->apexRest('GET', 'cpm/v2/PaymentMethods');
+```
+
 ## Schema meta properties
 
 When a resource is backed by an `Api\Schema\Schema`, meta properties on the

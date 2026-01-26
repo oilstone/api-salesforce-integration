@@ -161,4 +161,11 @@ class Salesforce
 
         return $this->request('DELETE', $url, ['log_request' => true]);
     }
+
+    public function apexRest(string $method, string $path, array $options = []): array
+    {
+        $url = $this->instanceUrl.'/services/apexrest/'.ltrim($path, '/');
+
+        return $this->request($method, $url, array_merge(['log_request' => true], $options));
+    }
 }
