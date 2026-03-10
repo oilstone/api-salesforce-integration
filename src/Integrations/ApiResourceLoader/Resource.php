@@ -3,6 +3,8 @@
 namespace Oilstone\ApiSalesforceIntegration\Integrations\ApiResourceLoader;
 
 use Api\Guards\OAuth2\Sentinel;
+use Api\Schema\Schema as BaseSchema;
+use Api\Transformers\Contracts\Transformer as TransformerContract;
 use Illuminate\Container\Container as IlluminateContainer;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Transformer;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository;
@@ -30,6 +32,16 @@ class Resource extends BaseResource
     protected ?QueryCacheHandler $cacheHandler = null;
 
     protected bool $cacheHandlerManuallySet = false;
+
+    /**
+     * @var array<int, callable>
+     */
+    protected array $beforeTransformCallbacks = [];
+
+    /**
+     * @var array<int, callable>
+     */
+    protected array $afterTransformCallbacks = [];
 
     public function __construct()
     {
@@ -152,6 +164,47 @@ class Resource extends BaseResource
         return $this;
     }
 
+    public function beforeTransform(callable $callback): static
+    {
+        $this->beforeTransformCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    public function afterTransform(callable $callback): static
+    {
+        $this->afterTransformCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    public function makeTransformer(BaseSchema $schema): ?TransformerContract
+    {
+        if (isset($this->cached['transformer'])) {
+            return $this->cached['transformer'];
+        }
+
+        $transformer = parent::makeTransformer($schema);
+
+        if (! $transformer) {
+            return null;
+        }
+
+        foreach ($this->beforeTransformCallbacks as $callback) {
+            if (method_exists($transformer, 'before')) {
+                $transformer->before($callback);
+            }
+        }
+
+        foreach ($this->afterTransformCallbacks as $callback) {
+            if (method_exists($transformer, 'after')) {
+                $transformer->after($callback);
+            }
+        }
+
+        return $this->cached['transformer'] = $transformer;
+    }
+
     protected function initialiseCacheHandlerFromContainer(): void
     {
         if ($this->cacheHandlerManuallySet || $this->cacheHandler instanceof QueryCacheHandler) {
@@ -255,3 +308,6 @@ class Resource extends BaseResource
         return $resolved instanceof QueryCacheHandler ? clone $resolved : null;
     }
 }
+
+
+

@@ -10,13 +10,49 @@ use Throwable;
 
 class Transformer implements Contract
 {
+    /**
+     * @var array<int, callable>
+     */
+    protected array $beforeCallbacks = [];
+
+    /**
+     * @var array<int, callable>
+     */
+    protected array $afterCallbacks = [];
+
     public function __construct(
         protected Schema $schema
     ) {}
 
+    public function before(callable $callback): static
+    {
+        $this->beforeCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    public function after(callable $callback): static
+    {
+        $this->afterCallbacks[] = $callback;
+
+        return $this;
+    }
+
     public function transform(Record $record): array
     {
-        return $this->transformSchema($this->schema, $record->getAttributes());
+        $attributes = $record->getAttributes();
+
+        foreach ($this->beforeCallbacks as $callback) {
+            $attributes = $callback($attributes, $record, $this->schema);
+        }
+
+        $transformed = $this->transformSchema($this->schema, $attributes);
+
+        foreach ($this->afterCallbacks as $callback) {
+            $transformed = $callback($transformed, $attributes, $record, $this->schema);
+        }
+
+        return $transformed;
     }
 
     public function reverse(array $attributes): array
@@ -325,3 +361,5 @@ class Transformer implements Contract
         return $value;
     }
 }
+
+

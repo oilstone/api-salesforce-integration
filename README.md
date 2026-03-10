@@ -187,6 +187,38 @@ keys:
 These meta keys can be combined to tailor how each schema property interacts
 with Salesforce while keeping the resource definition declarative.
 
+## Resource-level transform callbacks
+
+For cross-field shaping that should happen once around the whole schema
+transformation, register callbacks on the resource itself:
+
+```php
+class AccountResource extends \Oilstone\ApiSalesforceIntegration\Integrations\ApiResourceLoader\Resource
+{
+    public function __construct()
+    {
+        parent::__construct();
+
+        $this->beforeTransform(function (array $attributes) {
+            $attributes['FullName'] = trim(($attributes['FirstName'] ?? '') . ' ' . ($attributes['LastName'] ?? ''));
+
+            return $attributes;
+        });
+
+        $this->afterTransform(function (array $attributes) {
+            $attributes['display_name'] = strtoupper($attributes['full_name'] ?? '');
+
+            return $attributes;
+        });
+    }
+}
+```
+
+`beforeTransform()` runs before schema mapping and receives the raw Salesforce
+attributes. `afterTransform()` runs after schema mapping and receives the
+transformed attributes. Both callbacks may also accept the current record and
+schema as later arguments when needed.
+
 ## Lookups
 
 Extend `Lookup` or `CachedLookup` to pull picklist values from Salesforce:
@@ -209,3 +241,4 @@ $industries = IndustryLookup::all();
 ## License
 
 This package is released under the MIT license.
+
