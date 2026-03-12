@@ -19,6 +19,8 @@ class Query
 
     protected array $relationships = [];
 
+    protected array $relationshipGroups = [];
+
     protected array $conditions = [];
 
     protected array $orders = [];
@@ -92,19 +94,92 @@ class Query
             return $this;
         }
 
-        $compiled = $this->compileInclude($relation);
-        $this->relationships[] = $compiled;
+        $this->addIncludeToGroups($relation);
 
         return $this;
     }
 
+    protected function addIncludeToGroups(string $relation): void
+    {
+        [$relationPath, $fields] = $this->splitIncludeAndFields($relation);
+
+        $parts = array_values(array_filter(explode('.', $relationPath), fn ($part) => trim($part) !== ''));
+
+        if (! $parts) {
+            return;
+        }
+
+        $rootRelationship = $this->childRelationshipMetadata($this->object, $parts[0]);
+        $root = $rootRelationship['relationshipName'] ?? $parts[0];
+        $rootObject = $rootRelationship['childSObject'] ?? null;
+
+        if (! isset($this->relationshipGroups[$root])) {
+            $this->relationshipGroups[$root] = ['fields' => [], 'subqueries' => []];
+        }
+
+        if (count($parts) === 1) {
+            foreach ($this->normaliseFieldList($fields) as $field) {
+                $this->relationshipGroups[$root]['fields'][$field] = true;
+            }
+
+            return;
+        }
+
+        $path = implode('.', array_slice($parts, 1));
+
+        if ($this->isNestedChildRelationshipPath($rootObject, $path)) {
+            $subquery = $this->compileNestedSubquery($path, $fields);
+            $this->relationshipGroups[$root]['subqueries'][$subquery] = true;
+
+            return;
+        }
+
+        foreach ($this->normaliseFieldList($fields) as $field) {
+            $this->relationshipGroups[$root]['fields'][$path.'.'.$field] = true;
+        }
+    }
+
+    protected function splitIncludeAndFields(string $relation): array
+    {
+        if (! str_contains($relation, ':')) {
+            return [$relation, ''];
+        }
+
+        return explode(':', $relation, 2);
+    }
+
+    protected function normaliseFieldList(string $fields): array
+    {
+        $fieldList = array_filter(array_map(function ($field) {
+            return trim($field);
+        }, explode(',', $fields)));
+
+        if (! $fieldList) {
+            return [$this->identifier, 'Name'];
+        }
+
+        return $fieldList;
+    }
+
+    protected function isNestedChildRelationshipPath(?string $object, string $path): bool
+    {
+        if (! $object || str_contains($path, '.')) {
+            return false;
+        }
+
+        return (bool) $this->childRelationshipMetadata($object, $path);
+    }
+
+    protected function compileNestedSubquery(string $relationship, string $fields): string
+    {
+        $fieldString = implode(', ', $this->normaliseFieldList($fields));
+
+        return sprintf('(SELECT %s FROM %s)', $fieldString, $relationship);
+    }
+
     protected function compileInclude(string $relation): string
     {
-        $fields = '';
-
-        if (str_contains($relation, ':')) {
-            [$relation, $fields] = explode(':', $relation, 2);
-        }
+        [$relation, $fields] = $this->splitIncludeAndFields($relation);
 
         $parts = explode('.', $relation, 2);
 
@@ -119,13 +194,7 @@ class Query
             }
         }
 
-        $fieldList = array_filter(array_map(function ($field) {
-            return trim($field);
-        }, explode(',', $fields)));
-
-        if (! $fieldList) {
-            $fieldList = [$this->identifier, 'Name'];
-        }
+        $fieldList = $this->normaliseFieldList($fields);
 
         if ($prefix) {
             $fieldList = array_map(fn ($field) => sprintf('%s.%s', $prefix, $field), $fieldList);
@@ -138,15 +207,20 @@ class Query
 
     protected function childRelationshipName(string $object): ?string
     {
-        $describe = $this->describe($this->object);
+        return $this->childRelationshipMetadata($this->object, $object)['relationshipName'] ?? null;
+    }
+
+    protected function childRelationshipMetadata(string $object, string $relationshipOrChildObject): ?array
+    {
+        $describe = $this->describe($object);
 
         foreach ($describe['childRelationships'] ?? [] as $relationship) {
-            if (strcasecmp($relationship['childSObject'] ?? '', $object) === 0) {
-                return $relationship['relationshipName'] ?? null;
+            if (strcasecmp($relationship['childSObject'] ?? '', $relationshipOrChildObject) === 0) {
+                return $relationship;
             }
 
-            if (strcasecmp($relationship['relationshipName'] ?? '', $object) === 0) {
-                return $relationship['relationshipName'];
+            if (strcasecmp($relationship['relationshipName'] ?? '', $relationshipOrChildObject) === 0) {
+                return $relationship;
             }
         }
 
@@ -344,14 +418,17 @@ class Query
     {
         $originalSelects = $this->selects;
         $originalRelationships = $this->relationships;
+        $originalRelationshipGroups = $this->relationshipGroups;
 
         $this->selects = ['COUNT()'];
         $this->relationships = [];
+        $this->relationshipGroups = [];
 
         $soql = $this->toSoql();
 
         $this->selects = $originalSelects;
         $this->relationships = $originalRelationships;
+        $this->relationshipGroups = $originalRelationshipGroups;
 
         $callback = fn () => $this->client->rawQuery($soql);
 
@@ -417,7 +494,16 @@ class Query
 
     protected function toSoql(): string
     {
-        $select = implode(', ', array_merge($this->selects ?: [$this->identifier], $this->relationships));
+        $groupedRelationships = array_map(function (string $relation, array $parts) {
+            $fields = array_keys($parts['fields']);
+            $subqueries = array_keys($parts['subqueries']);
+
+            $fieldString = implode(', ', array_merge($fields, $subqueries));
+
+            return sprintf('(SELECT %s FROM %s)', $fieldString, $relation);
+        }, array_keys($this->relationshipGroups), $this->relationshipGroups);
+
+        $select = implode(', ', array_merge($this->selects ?: [$this->identifier], $this->relationships, $groupedRelationships));
         $query = "SELECT {$select} FROM {$this->object}";
 
         if ($this->conditions) {
