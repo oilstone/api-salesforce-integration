@@ -134,9 +134,22 @@ class Query
             return;
         }
 
+        $traversalPath = $this->normaliseTraversalPath($path);
+
         foreach ($this->normaliseFieldList($fields) as $field) {
-            $this->relationshipGroups[$root]['fields'][$path.'.'.$field] = true;
+            $this->relationshipGroups[$root]['fields'][$traversalPath.'.'.$field] = true;
         }
+    }
+
+    protected function normaliseTraversalPath(string $path): string
+    {
+        return implode('.', array_map(function (string $segment) {
+            if (str_ends_with($segment, '__c')) {
+                return substr($segment, 0, -3).'__r';
+            }
+
+            return $segment;
+        }, explode('.', $path)));
     }
 
     protected function splitIncludeAndFields(string $relation): array
@@ -188,10 +201,7 @@ class Query
 
         $prefix = null;
         if (count($parts) > 1) {
-            $prefix = $parts[1];
-            if (str_ends_with($prefix, '__c')) {
-                $prefix = substr($prefix, 0, -3).'__r';
-            }
+            $prefix = $this->normaliseTraversalPath($parts[1]);
         }
 
         $fieldList = $this->normaliseFieldList($fields);
