@@ -585,6 +585,10 @@ class Query
             return $value ? 'TRUE' : 'FALSE';
         }
 
-        return is_numeric($value) ? (string) $value : "'".addslashes($value)."'";
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        return "'".addslashes((string) $value)."'";
     }
 }
