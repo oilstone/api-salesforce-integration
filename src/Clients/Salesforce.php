@@ -162,6 +162,20 @@ class Salesforce
         return $this->request('DELETE', $url, ['log_request' => true]);
     }
 
+    public function flowAction(string $flowName, array $inputs): array
+    {
+        return $this->request(
+            'POST',
+            $this->instanceUrl.'/services/data/'.$this->instanceVersion.'/actions/custom/flow/'.trim($flowName, '/'),
+            [
+                'json' => [
+                    'inputs' => $inputs,
+                ],
+                'log_request' => true,
+            ],
+        );
+    }
+
     public function apexRest(string $method, string $path, array $options = []): array
     {
         $url = $this->instanceUrl.'/services/apexrest/'.ltrim($path, '/');
