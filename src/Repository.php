@@ -8,6 +8,8 @@ use Oilstone\ApiSalesforceIntegration\Exceptions\RecordNotFoundException;
 
 class Repository
 {
+    protected array $indexableFields;
+
     public function __construct(
         protected string $object,
         protected array $defaultConstraints = [],
@@ -16,7 +18,12 @@ class Repository
         protected string $defaultIdentifier = 'Id',
         protected ?QueryCacheHandler $cacheHandler = null,
         protected ?Salesforce $client = null,
-    ) {}
+        array $indexableFields = [],
+    ) {
+        $this->indexableFields = $indexableFields !== []
+            ? array_values(array_unique($indexableFields))
+            : [$defaultIdentifier];
+    }
 
     public function setDefaultConstraints(array $constraints): static
     {
@@ -34,7 +41,17 @@ class Repository
 
     public function setIdentifier(string $identifier): static
     {
+        $previous = $this->defaultIdentifier;
         $this->defaultIdentifier = $identifier;
+
+        $position = array_search($previous, $this->indexableFields, true);
+
+        if ($position !== false) {
+            $this->indexableFields[$position] = $identifier;
+            $this->indexableFields = array_values(array_unique($this->indexableFields));
+        } elseif (! in_array($identifier, $this->indexableFields, true)) {
+            array_unshift($this->indexableFields, $identifier);
+        }
 
         return $this;
     }
@@ -70,6 +87,24 @@ class Repository
         return $this;
     }
 
+    public function setIndexableFields(array $fields): static
+    {
+        $fields = array_values(array_unique(array_filter($fields, 'is_string')));
+
+        if (! in_array($this->defaultIdentifier, $fields, true)) {
+            array_unshift($fields, $this->defaultIdentifier);
+        }
+
+        $this->indexableFields = $fields;
+
+        return $this;
+    }
+
+    public function getIndexableFields(): array
+    {
+        return $this->indexableFields;
+    }
+
     public function newQuery(?string $object = null): Query
     {
         $query = new Query($object ?? $this->object, $this->getClient(), $this->defaultIdentifier);
@@ -77,6 +112,8 @@ class Repository
         if ($this->cacheHandler) {
             $query->setCacheHandler($this->cacheHandler);
         }
+
+        $query->setIndexableFields($this->indexableFields);
 
         foreach ($this->defaultConstraints as $constraint) {
             if (is_array($constraint)) {
@@ -136,8 +173,8 @@ class Repository
             $query->offset($options['offset']);
         }
 
-        if (isset($options['skip_cache'])) {
-            $query->setCacheOptions(['skip_cache' => $options['skip_cache']]);
+        if (isset($options['skip_retrieval'])) {
+            $query->setCacheOptions(['skip_retrieval' => $options['skip_retrieval']]);
         }
 
         return $query;
@@ -269,18 +306,7 @@ class Repository
             $query->where($field, $value);
         }
 
-        foreach ($options['conditions'] ?? [] as $condition) {
-            if (is_callable($condition)) {
-                $condition($query);
-                continue;
-            }
-
-            if (is_array($condition)) {
-                $query->where(...$condition);
-            }
-        }
-
-        return $query->count();
+        return $this->applyOptions($query, $options)->count();
     }
 
     public function create(array $attributes): array
@@ -300,7 +326,7 @@ class Repository
             return array_merge($payload, $result ?? []);
         }
 
-        return $this->findOrFail(['Id' => $recordId]);
+        return $this->findOrFail([$this->defaultIdentifier => $recordId], ['skip_retrieval' => true]);
     }
 
     public function update(string $id, array $attributes): array
@@ -308,16 +334,13 @@ class Repository
         $payload = array_replace_recursive($this->defaultValues, $attributes);
         $payload = $this->filterNullDefaults($payload, $attributes);
 
-        $result = $this->getClient()->update($this->object, $id, $payload, $this->defaultIdentifier);
+        $stale = $this->captureStaleForInvalidation([$this->defaultIdentifier => $id]);
 
-        if ($this->cacheHandler) {
-            $this->cacheHandler->flushQueryCache();
-            $this->cacheHandler->forgetEntryByConditions($this->object, [
-                $this->defaultIdentifier => $id,
-            ]);
-        }
+        $this->getClient()->update($this->object, $id, $payload, $this->defaultIdentifier);
 
-        return $this->findOrFail([$this->defaultIdentifier => $id]);
+        $this->invalidateAfterMutation($id, $stale, $payload);
+
+        return $this->findOrFail([$this->defaultIdentifier => $id], ['skip_retrieval' => true]);
     }
 
     public function upsertRecord(string $identifierValue, array $attributes, ?string $identifier = null): array
@@ -327,31 +350,27 @@ class Repository
 
         $identifier ??= $this->defaultIdentifier;
 
-        $result = $this->getClient()->upsert($this->object, $identifierValue, $payload, $identifier);
+        $stale = $this->captureStaleForInvalidation([$identifier => $identifierValue]);
+
+        $this->getClient()->upsert($this->object, $identifierValue, $payload, $identifier);
 
         if ($this->cacheHandler) {
             $this->cacheHandler->flushQueryCache();
-            $this->cacheHandler->forgetEntryByConditions($this->object, [
-                $identifier => $identifierValue,
-            ]);
+            $this->cacheHandler->forgetEntryByConditions($this->object, [$identifier => $identifierValue]);
 
-            if ($identifier !== $this->defaultIdentifier) {
-                $defaultIdentifierValue = $payload[$this->defaultIdentifier] ?? $result[$this->defaultIdentifier] ?? $result['id'] ?? null;
-
-                if ($defaultIdentifierValue !== null) {
-                    $this->cacheHandler->forgetEntryByConditions($this->object, [
-                        $this->defaultIdentifier => $defaultIdentifierValue,
-                    ]);
-                }
+            if (is_array($stale)) {
+                $this->forgetIndexableFields($stale, $payload);
+            } else {
+                $this->forgetPayloadIndexableFields($payload);
             }
         }
 
-        return $this->findOrFail([$identifier => $identifierValue]);
+        return $this->findOrFail([$identifier => $identifierValue], ['skip_retrieval' => true]);
     }
 
     public function upsert(array $conditions, array $attributes): array
     {
-        $existing = $this->first($conditions);
+        $existing = $this->first($conditions, ['skip_retrieval' => true]);
 
         if ($existing) {
             return $this->update($existing[$this->defaultIdentifier], $attributes);
@@ -362,13 +381,17 @@ class Repository
 
     public function delete(string $id): array
     {
+        $stale = $this->captureStaleForInvalidation([$this->defaultIdentifier => $id]);
+
         $result = $this->getClient()->delete($this->object, $id, $this->defaultIdentifier);
 
         if ($this->cacheHandler) {
             $this->cacheHandler->flushQueryCache();
-            $this->cacheHandler->forgetEntryByConditions($this->object, [
-                $this->defaultIdentifier => $id,
-            ]);
+            $this->cacheHandler->forgetEntryByConditions($this->object, [$this->defaultIdentifier => $id]);
+
+            if (is_array($stale)) {
+                $this->forgetIndexableFields($stale);
+            }
         }
 
         return $result;
@@ -387,7 +410,10 @@ class Repository
             $query->where($field, $value);
         }
 
-        $record = $this->applyOptions($query, ['select' => ['FIELDS(ALL)']])->first();
+        $record = $this->applyOptions($query, [
+            'select' => ['FIELDS(ALL)'],
+            'skip_retrieval' => true,
+        ])->first();
 
         if ($record) {
             return $record;
@@ -404,7 +430,10 @@ class Repository
             $query->where($field, $value);
         }
 
-        $record = $this->applyOptions($query, ['select' => [$this->defaultIdentifier]])->first();
+        $record = $this->applyOptions($query, [
+            'select' => [$this->defaultIdentifier],
+            'skip_retrieval' => true,
+        ])->first();
 
         if ($record) {
             return $this->update($record[$this->defaultIdentifier], $values);
@@ -415,7 +444,7 @@ class Repository
 
     protected function isOptionsArray(array $data): bool
     {
-        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset', 'skip_cache'];
+        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset', 'skip_retrieval'];
 
         return (bool) array_intersect(array_keys($data), $optionKeys);
     }
@@ -423,6 +452,83 @@ class Repository
     protected function getClient(): Salesforce
     {
         return $this->client ?? app(Salesforce::class);
+    }
+
+    protected function captureStaleForInvalidation(array $lookup): ?array
+    {
+        if (! $this->cacheHandler || ! $this->hasNonDefaultIndexableFields()) {
+            return null;
+        }
+
+        return $this->first($lookup);
+    }
+
+    protected function invalidateAfterMutation(string $id, ?array $stale, array $payload): void
+    {
+        if (! $this->cacheHandler) {
+            return;
+        }
+
+        $this->cacheHandler->flushQueryCache();
+        $this->cacheHandler->forgetEntryByConditions($this->object, [$this->defaultIdentifier => $id]);
+
+        if (is_array($stale)) {
+            $this->forgetIndexableFields($stale, $payload);
+        } else {
+            $this->forgetPayloadIndexableFields($payload);
+        }
+    }
+
+    protected function forgetIndexableFields(array $record, array $payload = []): void
+    {
+        if (! $this->cacheHandler) {
+            return;
+        }
+
+        foreach ($this->indexableFields as $field) {
+            if ($field === $this->defaultIdentifier) {
+                continue;
+            }
+
+            $oldValue = $record[$field] ?? null;
+            $newValue = $payload[$field] ?? null;
+
+            foreach (array_unique(array_filter([$oldValue, $newValue], static fn ($v) => $v !== null), SORT_REGULAR) as $value) {
+                $this->cacheHandler->forgetEntryByConditions($this->object, [$field => $value]);
+            }
+        }
+    }
+
+    protected function forgetPayloadIndexableFields(array $payload): void
+    {
+        if (! $this->cacheHandler) {
+            return;
+        }
+
+        foreach ($this->indexableFields as $field) {
+            if ($field === $this->defaultIdentifier) {
+                continue;
+            }
+
+            $value = $payload[$field] ?? null;
+
+            if ($value === null) {
+                continue;
+            }
+
+            $this->cacheHandler->forgetEntryByConditions($this->object, [$field => $value]);
+        }
+    }
+
+    protected function hasNonDefaultIndexableFields(): bool
+    {
+        foreach ($this->indexableFields as $field) {
+            if ($field !== $this->defaultIdentifier) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function filterNullDefaults(array $payload, array $attributes): array

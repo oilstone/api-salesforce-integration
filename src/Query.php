@@ -33,6 +33,8 @@ class Query
 
     protected array $cacheOptions = [];
 
+    protected array $indexableFields = [];
+
     public function __construct(string $object, Salesforce $client, string $identifier = 'Id')
     {
         $this->object = $object;
@@ -53,6 +55,18 @@ class Query
         $this->cacheOptions = $options;
 
         return $this;
+    }
+
+    public function setIndexableFields(array $fields): static
+    {
+        $this->indexableFields = array_values(array_unique(array_filter($fields, 'is_string')));
+
+        return $this;
+    }
+
+    public function getIndexableFields(): array
+    {
+        return $this->indexableFields;
     }
 
     public static function make(string $object, Salesforce $client, string $identifier = 'Id'): static
@@ -390,9 +404,9 @@ class Query
 
     public function pluck(string $column, ?string $index = null): array
     {
-        $originalSelects = $this->selects;
+        $query = clone $this;
 
-        $selects = $this->selects;
+        $selects = $query->selects;
 
         if (! in_array($column, $selects, true)) {
             $selects[] = $column;
@@ -402,11 +416,9 @@ class Query
             $selects[] = $index;
         }
 
-        $this->select($selects);
+        $query->select($selects);
 
-        $results = $this->get();
-
-        $this->selects = $originalSelects;
+        $results = $query->get();
 
         $values = [];
 
