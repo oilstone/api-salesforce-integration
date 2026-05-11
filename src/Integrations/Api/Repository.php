@@ -33,6 +33,8 @@ class Repository implements RepositoryInterface
 
     protected string $identifier = 'Id';
 
+    protected array $indexableFields = [];
+
     public function __construct(
         protected ?string $object = null,
     ) {}
@@ -92,6 +94,18 @@ class Repository implements RepositoryInterface
     public function getIdentifier(): string
     {
         return $this->identifier;
+    }
+
+    public function setIndexableFields(array $fields): static
+    {
+        $this->indexableFields = array_values(array_unique(array_filter($fields, 'is_string')));
+
+        return $this;
+    }
+
+    public function getIndexableFields(): array
+    {
+        return $this->indexableFields;
     }
 
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
@@ -347,6 +361,8 @@ class Repository implements RepositoryInterface
             $this->getDefaultValues(),
             $this->identifier,
             $this->cacheHandler,
+            null,
+            $this->indexableFields,
         );
     }
 

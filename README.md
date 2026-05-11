@@ -35,40 +35,83 @@ If your project uses Laravel you can register the service provider and publish t
 php artisan vendor:publish --tag=config --provider="Oilstone\\ApiSalesforceIntegration\\Integrations\\Laravel\\ServiceProvider"
 ```
 
-Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger. Queries served from the cache are also logged with a `cache` flag so they can be distinguished from live requests. When the package is resolved inside an Artisan command, scheduler task or queued job the query cache is still populated but lookups default to the live API to avoid stale data in long-running console processes.
+Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger. Queries served from the cache are also logged with a `cache` flag so they can be distinguished from live requests.
+
+OAuth access tokens are managed by `SalesforceTokenManager`, which caches the
+token under the key `salesforce.access_token`, derives its TTL from the
+`expires_in` field returned by Salesforce (with a 60 second safety margin),
+serialises concurrent token fetches with a cache lock to avoid thundering-herd
+requests, and transparently refreshes the token if any Salesforce call returns
+HTTP 401. This works out of the box with the Redis cache store.
 
 When authenticating with the client credentials grant you must supply at least one OAuth scope. Set the `SALESFORCE_SCOPES` environment variable to a comma separated list (or define the `scopes` array in the published configuration) and the service provider will include them in the token request.
 
-The package divides caching into two layers via `QueryCacheHandler`:
+The package divides caching into three independent layers via
+`QueryCacheHandler`:
 
 * **Query cache** entries persist the results of SOQL queries for a short TTL.
   The SOQL string itself is hashed to generate the cache key and a single
-  `flushQueryCache` method clears every cached query in one call.
-* **Entry cache** entries store individual records for a longer TTL. Keys are
-  derived from the queried object's conditions, ensuring `find`, `first` and
-  similar operations can reuse cached records. Entry cache items can be
-  removed on demand by passing the same conditions back to the handler.
+  `flushQueryCache` method invalidates every cached query in one call by
+  rotating an internal namespace token. The query cache is also flushed
+  automatically by any repository mutation (`create`, `update`, `upsert`,
+  `upsertRecord`, `delete`).
+* **Entry cache** entries store individual records returned from `find` /
+  `first` lookups for a longer TTL. Each cached entry is indexed under every
+  configured "indexable field" (the record's `Id` by default, plus any extra
+  unique columns you register via `setIndexableFields`). Mutations invalidate
+  the entry under each known indexable field so a record cached by `Email`
+  remains in sync after an update keyed by `Id`. Negative results (`null` for
+  "not found") are deliberately not cached, so a subsequent `create` is never
+  fooled by a stale miss.
+* **Schema cache** entries store object describe payloads and picklist value
+  responses, which rarely change. Schema entries live in their own namespace
+  and are **not** affected by `flushQueryCache`, so the (expensive) describe
+  call is preserved across data mutations. Use `flushSchemaCache` or the
+  `--schema` flag on the Artisan command to invalidate them after a Salesforce
+  metadata change.
 
-Use the Artisan command to clear caches:
+### Configuring entry cache invalidation
 
-```bash
-php artisan salesforce:cache:clear Account              # Flushes all query cache entries
-php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX
-php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX --field=External_Id__c
+By default the entry cache is keyed by the repository's identifier (`Id`, or
+whatever you set with `setIdentifier`). If you also look records up by other
+unique fields (an external ID, an email column, etc.), register them so
+mutations can invalidate every cached copy:
+
+```php
+$repository = (new Repository('Contact'))
+    ->setIdentifier('Id')
+    ->setIndexableFields(['Id', 'Email', 'External_Id__c']);
 ```
 
-Supplying an ID (and optionally an alternate field) clears both the query
-cache and the targeted entry cache for that record. Repository `create`,
-`update`, `upsertRecord` and `delete` operations automatically flush the query
-cache, and updates/upserts/deletions evict the related entry cache entry so
-fresh data is fetched next time.
+Only register fields that uniquely identify a record. Non-unique fields (e.g.
+`Status`) are not appropriate as indexable fields. Note that if the value of
+an indexable field changes during an update, the cache entry keyed under the
+old value is left to expire via TTL — this is rarely a problem when
+indexable fields are immutable identifiers.
 
-Default TTLs can be configured via the `SALESFORCE_QUERY_CACHE_DEFAULT_TTL`
-and `SALESFORCE_ENTRY_CACHE_DEFAULT_TTL` environment variables (or their
-respective `salesforce.php` configuration values).
+### Clearing caches manually
 
-Object descriptions fetched via the client are also cached through the same
-handler, preventing repetitive calls to Salesforce's `describe` endpoint.
+```bash
+php artisan salesforce:cache:clear                                          # Flushes all query cache entries
+php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX               # Also forgets the entry cache for that Id
+php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX --field=External_Id__c
+php artisan salesforce:cache:clear --schema                                 # Flushes only the schema cache
+```
+
+### Configuration
+
+Default TTLs and behaviour can be configured via environment variables (or the
+corresponding keys in the published `salesforce.php` configuration file):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SALESFORCE_QUERY_CACHE_DEFAULT_TTL` | `3600` | TTL (seconds) for cached SOQL query results. |
+| `SALESFORCE_ENTRY_CACHE_DEFAULT_TTL` | `86400` | TTL (seconds) for cached individual records. |
+| `SALESFORCE_SCHEMA_CACHE_DEFAULT_TTL` | `86400` | TTL (seconds) for cached describe / picklist payloads. |
+| `SALESFORCE_SKIP_RETRIEVAL_DEFAULT` | `false` | When `true`, every cached lookup bypasses the cache on the way in (cache is still populated). Useful for long-running queue workers that need fresh reads. |
+
+You can also opt out of the cache on a single call by passing
+`'skip_retrieval' => true` in the repository options array.
 
 ## Basic usage
 

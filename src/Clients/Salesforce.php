@@ -3,6 +3,8 @@
 namespace Oilstone\ApiSalesforceIntegration\Clients;
 
 use GuzzleHttp\Client;
+use Oilstone\ApiSalesforceIntegration\Auth\StaticTokenManager;
+use Oilstone\ApiSalesforceIntegration\Auth\TokenManager;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Exceptions\SalesforceException;
 use Psr\Log\LoggerInterface;
@@ -13,7 +15,7 @@ class Salesforce
 
     protected string $instanceUrl;
 
-    protected string $accessToken;
+    protected TokenManager $tokenManager;
 
     protected string $instanceVersion;
 
@@ -21,11 +23,19 @@ class Salesforce
 
     protected ?QueryCacheHandler $cacheHandler = null;
 
-    public function __construct(Client $httpClient, string $instanceUrl, string $accessToken, string $instanceVersion = 'v52.0', ?LoggerInterface $logger = null, ?QueryCacheHandler $cacheHandler = null)
-    {
+    public function __construct(
+        Client $httpClient,
+        string $instanceUrl,
+        string|TokenManager $accessToken,
+        string $instanceVersion = 'v52.0',
+        ?LoggerInterface $logger = null,
+        ?QueryCacheHandler $cacheHandler = null,
+    ) {
         $this->httpClient = $httpClient;
         $this->instanceUrl = rtrim($instanceUrl, '/');
-        $this->accessToken = $accessToken;
+        $this->tokenManager = $accessToken instanceof TokenManager
+            ? $accessToken
+            : new StaticTokenManager($accessToken);
         $this->instanceVersion = $instanceVersion;
         $this->logger = $logger;
         $this->cacheHandler = $cacheHandler;
@@ -45,11 +55,11 @@ class Salesforce
         ]));
     }
 
-    protected function request(string $method, string $url, array $options = []): array
+    protected function request(string $method, string $url, array $options = [], bool $isRetry = false): array
     {
         $response = $this->httpClient->request($method, $url, array_merge([
             'headers' => [
-                'Authorization' => 'Bearer '.$this->accessToken,
+                'Authorization' => 'Bearer '.$this->tokenManager->getToken(),
                 'Accept' => 'application/json',
             ],
             'http_errors' => false,
@@ -60,6 +70,12 @@ class Salesforce
 
         if ($options['log_request'] ?? false) {
             $this->log($method, $url, $options, $data ?? [], $response->getStatusCode());
+        }
+
+        if ($response->getStatusCode() === 401 && ! $isRetry) {
+            $this->tokenManager->refresh();
+
+            return $this->request($method, $url, $options, true);
         }
 
         if ($response->getStatusCode() >= 400) {
@@ -94,7 +110,7 @@ class Salesforce
         );
 
         if ($this->cacheHandler) {
-            return $this->cacheHandler->rememberQuery('DESCRIBE '.$object, $callback, $options);
+            return $this->cacheHandler->rememberSchema('DESCRIBE '.$object, $callback, $options);
         }
 
         return $callback();
@@ -111,7 +127,7 @@ class Salesforce
         );
 
         $data = $this->cacheHandler
-            ? $this->cacheHandler->rememberQuery('PICKLIST_VALUES '.$object.'_'.$recordTypeId.'_'.$field, $callback, $options)
+            ? $this->cacheHandler->rememberSchema('PICKLIST_VALUES '.$object.'_'.$recordTypeId.'_'.$field, $callback, $options)
             : $callback();
 
         return array_values(array_map(

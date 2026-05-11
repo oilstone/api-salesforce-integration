@@ -7,7 +7,7 @@ use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 
 class ClearCache extends Command
 {
-    protected $signature = 'salesforce:cache:clear {resource} {id?} {--field=Id}';
+    protected $signature = 'salesforce:cache:clear {resource?} {id?} {--field=Id} {--schema}';
 
     protected $description = 'Clear Salesforce cache entries';
 
@@ -16,14 +16,21 @@ class ClearCache extends Command
         /** @var QueryCacheHandler $handler */
         $handler = app(QueryCacheHandler::class);
 
-        $resource = (string) $this->argument('resource');
+        if ($this->option('schema')) {
+            $handler->flushSchemaCache();
+            $this->info('Cleared Salesforce schema cache (object describes and picklist values).');
+
+            return 0;
+        }
+
+        $resource = $this->argument('resource');
         $id = $this->argument('id');
         $field = (string) $this->option('field');
 
         $handler->flushQueryCache();
 
-        if ($id) {
-            $handler->forgetEntryByConditions($resource, [$field => $id]);
+        if ($resource && $id) {
+            $handler->forgetEntryByConditions((string) $resource, [$field => $id]);
             $this->info(sprintf(
                 'Cleared query cache and entry cache for %s where %s = %s.',
                 $resource,
@@ -34,7 +41,7 @@ class ClearCache extends Command
             return 0;
         }
 
-        $this->info(sprintf('Cleared query cache for %s queries.', $resource));
+        $this->info('Cleared Salesforce query cache.');
 
         return 0;
     }

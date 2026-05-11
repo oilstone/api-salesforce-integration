@@ -8,5 +8,7 @@ return [
     'debug' => env('SALESFORCE_DEBUG', false),
     'query_cache_default_ttl' => env('SALESFORCE_QUERY_CACHE_DEFAULT_TTL', 3600),
     'entry_cache_default_ttl' => env('SALESFORCE_ENTRY_CACHE_DEFAULT_TTL', 86400),
+    'schema_cache_default_ttl' => env('SALESFORCE_SCHEMA_CACHE_DEFAULT_TTL', 86400),
+    'skip_retrieval_default' => env('SALESFORCE_SKIP_RETRIEVAL_DEFAULT', false),
     'scopes' => array_filter(array_map('trim', explode(',', (string) env('SALESFORCE_SCOPES', '')))),
 ];
