@@ -262,6 +262,22 @@ attributes. `afterTransform()` runs after schema mapping and receives the
 transformed attributes. Both callbacks may also accept the current record and
 schema as later arguments when needed.
 
+## Resource-level cache toggle
+
+Salesforce resource classes cache query results by default. To disable caching
+for a single resource, set `cacheEnabled` to `false` (or call
+`setCacheEnabled(false)`):
+
+```php
+class LiveAccountResource extends \Oilstone\ApiSalesforceIntegration\Integrations\ApiResourceLoader\Resource
+{
+    protected bool $cacheEnabled = false;
+}
+```
+
+This applies only to repositories created through that resource; other
+resources continue using cache by default.
+
 ## Lookups
 
 Extend `Lookup` or `CachedLookup` to pull picklist values from Salesforce:
