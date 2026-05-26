@@ -29,6 +29,8 @@ class Resource extends BaseResource
 
     protected ?int $cacheTtl = null;
 
+    protected bool $cacheEnabled = true;
+
     protected ?QueryCacheHandler $cacheHandler = null;
 
     protected bool $cacheHandlerManuallySet = false;
@@ -83,7 +85,7 @@ class Resource extends BaseResource
             ->setDefaultIncludes(array_merge($this->includes(), $this->includes))
             ->setIdentifier($this->identifier);
 
-        $cacheHandler = $this->getCacheHandler();
+        $cacheHandler = $this->cacheEnabled ? $this->getCacheHandler() : null;
 
         if (method_exists($repository, 'setCacheHandler') && $cacheHandler) {
             $handler = clone $cacheHandler;
@@ -148,6 +150,19 @@ class Resource extends BaseResource
     public function setIdentifier(string $identifier): static
     {
         $this->identifier = $identifier;
+
+        return $this;
+    }
+
+
+    public function cacheEnabled(): bool
+    {
+        return $this->cacheEnabled;
+    }
+
+    public function setCacheEnabled(bool $enabled): static
+    {
+        $this->cacheEnabled = $enabled;
 
         return $this;
     }
