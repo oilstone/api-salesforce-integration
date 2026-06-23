@@ -69,7 +69,12 @@ class Query
     public function orderBy(array $orders): self
     {
         foreach ($orders as $order) {
-            $this->baseQuery->orderBy(method_exists($order, 'getProperty') ? $order->getProperty() : $order->getPropertyName(), $order->getDirection());
+            $property = $order->getPath()->getEntity();
+
+            $this->baseQuery->orderBy(
+                $property?->alias ?? $property?->getPropertyName() ?? $order->getPropertyName(),
+                $order->getDirection()
+            );
         }
 
         return $this;
