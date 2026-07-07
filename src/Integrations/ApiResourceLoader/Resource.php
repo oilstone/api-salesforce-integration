@@ -7,6 +7,7 @@ use Api\Schema\Schema as BaseSchema;
 use Api\Transformers\Contracts\Transformer as TransformerContract;
 use Illuminate\Container\Container as IlluminateContainer;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Transformer;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Contracts\CollectionTransformer;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Repository;
 use Oilstone\ApiResourceLoader\Resources\Resource as BaseResource;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
@@ -44,6 +45,16 @@ class Resource extends BaseResource
      * @var array<int, callable>
      */
     protected array $afterTransformCallbacks = [];
+
+    /**
+     * @var array<int, callable>
+     */
+    protected array $beforeTransformCollectionCallbacks = [];
+
+    /**
+     * @var array<int, callable>
+     */
+    protected array $afterTransformCollectionCallbacks = [];
 
     public function __construct()
     {
@@ -193,6 +204,20 @@ class Resource extends BaseResource
         return $this;
     }
 
+    public function beforeTransformCollection(callable $callback): static
+    {
+        $this->beforeTransformCollectionCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    public function afterTransformCollection(callable $callback): static
+    {
+        $this->afterTransformCollectionCallbacks[] = $callback;
+
+        return $this;
+    }
+
     public function makeTransformer(BaseSchema $schema): ?TransformerContract
     {
         if (isset($this->cached['transformer'])) {
@@ -214,6 +239,16 @@ class Resource extends BaseResource
         foreach ($this->afterTransformCallbacks as $callback) {
             if (method_exists($transformer, 'after')) {
                 $transformer->after($callback);
+            }
+        }
+
+        if ($transformer instanceof CollectionTransformer) {
+            foreach ($this->beforeTransformCollectionCallbacks as $callback) {
+                $transformer->beforeCollection($callback);
+            }
+
+            foreach ($this->afterTransformCollectionCallbacks as $callback) {
+                $transformer->afterCollection($callback);
             }
         }
 
@@ -323,6 +358,3 @@ class Resource extends BaseResource
         return $resolved instanceof QueryCacheHandler ? clone $resolved : null;
     }
 }
-
-
-

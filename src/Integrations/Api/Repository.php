@@ -13,7 +13,10 @@ use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
 use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Collection as ApiResultCollection;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record as ApiResultRecord;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\TransformedRecord;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Contracts\CollectionTransformer;
 use Oilstone\ApiSalesforceIntegration\RecordCollection;
 use Oilstone\ApiSalesforceIntegration\Record;
 use Psr\Http\Message\ServerRequestInterface;
@@ -117,7 +120,13 @@ class Repository implements RepositoryInterface
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
     {
-        return (new QueryResolver($this->newQuery($request->getQueryParams()['object'] ?? null), $pipe, $this->getDefaultFields()))->collection($request);
+        $collection = (new QueryResolver($this->newQuery($request->getQueryParams()['object'] ?? null), $pipe, $this->getDefaultFields()))->collection($request);
+
+        if ($this->hasCollectionTransforms()) {
+            return $this->transformResultCollection($collection);
+        }
+
+        return $collection;
     }
 
     public function getRecord(Pipe $pipe, ServerRequestInterface $request): ?ResultRecordInterface
@@ -267,9 +276,7 @@ class Repository implements RepositoryInterface
 
         $records = $this->repository($object)->get($conditions, $options);
 
-        $records = array_map(fn (array $record) => $this->transformRecord($record), $records);
-
-        return RecordCollection::make($records);
+        return RecordCollection::make($this->transformRecords($records));
     }
 
     /**
@@ -420,6 +427,87 @@ class Repository implements RepositoryInterface
         }
 
         return Record::make($record, $raw);
+    }
+
+    /**
+     * Transform a set of record arrays into domain records, bracketing the
+     * per-record transformation with the collection-level hooks when present.
+     *
+     * @param array<int, array> $records
+     * @return array<int, Record>
+     */
+    protected function transformRecords(array $records): array
+    {
+        $transformer = $this->transformer;
+
+        if (! $transformer) {
+            return array_map(fn (array $record) => Record::make($record, $record), $records);
+        }
+
+        if (! $transformer instanceof CollectionTransformer || ! $transformer->hasCollectionCallbacks()) {
+            return array_map(fn (array $record) => $this->transformRecord($record), $records);
+        }
+
+        $resultRecords = $transformer->applyBeforeCollection(
+            array_map(fn (array $record) => ApiResultRecord::make($record), array_values($records))
+        );
+
+        $transformed = array_map(
+            fn (ResultRecordInterface $record) => $transformer->transform($record),
+            $resultRecords
+        );
+
+        $transformed = $transformer->applyAfterCollection($transformed, $resultRecords);
+
+        $result = [];
+
+        foreach ($resultRecords as $index => $resultRecord) {
+            $result[] = Record::make($transformed[$index] ?? [], $resultRecord->getAttributes());
+        }
+
+        return $result;
+    }
+
+    /**
+     * Eagerly transform an API result collection so the collection-level hooks
+     * can see the whole set. The framework re-transforms each member while
+     * building its representation, which the returned records treat as a
+     * passthrough so relationship includes and metadata still resolve normally.
+     */
+    protected function transformResultCollection(ResultCollectionInterface $collection): ResultCollectionInterface
+    {
+        $transformer = $this->transformer;
+
+        if (! $transformer instanceof CollectionTransformer) {
+            return $collection;
+        }
+
+        $records = $transformer->applyBeforeCollection(array_values($collection->getItems()));
+
+        $transformed = array_map(
+            fn (ResultRecordInterface $record) => $transformer->transform($record),
+            $records
+        );
+
+        $transformed = $transformer->applyAfterCollection($transformed, $records);
+
+        $wrapped = [];
+
+        foreach ($records as $index => $record) {
+            $wrapped[] = TransformedRecord::fromRecord($record, $transformed[$index] ?? []);
+        }
+
+        return ApiResultCollection::make($wrapped, $collection->getMetaData());
+    }
+
+    /**
+     * Determine whether the configured transformer carries collection-level
+     * transform callbacks.
+     */
+    protected function hasCollectionTransforms(): bool
+    {
+        return $this->transformer instanceof CollectionTransformer
+            && $this->transformer->hasCollectionCallbacks();
     }
 
     /**

@@ -6,9 +6,11 @@ use Api\Result\Contracts\Record;
 use Api\Schema\Schema;
 use Api\Transformers\Contracts\Transformer as Contract;
 use Carbon\Carbon;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\TransformedRecord;
+use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Contracts\CollectionTransformer;
 use Throwable;
 
-class Transformer implements Contract
+class Transformer implements Contract, CollectionTransformer
 {
     /**
      * @var array<int, callable>
@@ -19,6 +21,16 @@ class Transformer implements Contract
      * @var array<int, callable>
      */
     protected array $afterCallbacks = [];
+
+    /**
+     * @var array<int, callable>
+     */
+    protected array $beforeCollectionCallbacks = [];
+
+    /**
+     * @var array<int, callable>
+     */
+    protected array $afterCollectionCallbacks = [];
 
     public function __construct(
         protected Schema $schema
@@ -38,8 +50,80 @@ class Transformer implements Contract
         return $this;
     }
 
+    public function beforeCollection(callable $callback): static
+    {
+        $this->beforeCollectionCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    public function afterCollection(callable $callback): static
+    {
+        $this->afterCollectionCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    public function hasCollectionCallbacks(): bool
+    {
+        return $this->beforeCollectionCallbacks !== [] || $this->afterCollectionCallbacks !== [];
+    }
+
+    /**
+     * Run the registered before-collection callbacks over the raw record set.
+     *
+     * @param array<int, Record> $records
+     * @return array<int, Record>
+     */
+    public function applyBeforeCollection(array $records): array
+    {
+        foreach ($this->beforeCollectionCallbacks as $callback) {
+            $records = array_values($callback($records, $this->schema));
+        }
+
+        return $records;
+    }
+
+    /**
+     * Run the registered after-collection callbacks over the transformed set.
+     *
+     * @param array<int, array> $transformed
+     * @param array<int, Record> $records
+     * @return array<int, array>
+     */
+    public function applyAfterCollection(array $transformed, array $records): array
+    {
+        foreach ($this->afterCollectionCallbacks as $callback) {
+            $transformed = array_values($callback($transformed, $records, $this->schema));
+        }
+
+        return $transformed;
+    }
+
+    /**
+     * Transform an entire collection, bracketing the per-record transformation
+     * with the collection-level before and after hooks.
+     *
+     * @param iterable<int, Record> $records
+     * @return array<int, array>
+     */
+    public function transformCollection(iterable $records): array
+    {
+        $records = array_values(is_array($records) ? $records : iterator_to_array($records, false));
+
+        $records = $this->applyBeforeCollection($records);
+
+        $transformed = array_map(fn (Record $record) => $this->transform($record), $records);
+
+        return $this->applyAfterCollection($transformed, $records);
+    }
+
     public function transform(Record $record): array
     {
+        if ($record instanceof TransformedRecord) {
+            return $record->getAttributes();
+        }
+
         $attributes = $record->getAttributes();
 
         foreach ($this->beforeCallbacks as $callback) {
@@ -361,5 +445,3 @@ class Transformer implements Contract
         return $value;
     }
 }
-
-

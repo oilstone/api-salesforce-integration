@@ -262,6 +262,53 @@ attributes. `afterTransform()` runs after schema mapping and receives the
 transformed attributes. Both callbacks may also accept the current record and
 schema as later arguments when needed.
 
+## Resource-level collection transform callbacks
+
+The record callbacks above run once per record. To shape an entire collection
+in a single pass — for example to batch-load related data before transformation
+or to compute cross-record values afterwards — register collection callbacks on
+the resource:
+
+```php
+class AccountResource extends \Oilstone\ApiSalesforceIntegration\Integrations\ApiResourceLoader\Resource
+{
+    public function __construct()
+    {
+        parent::__construct();
+
+        $this->beforeTransformCollection(function (array $records) {
+            // $records is the list of raw result records about to be transformed.
+            // Return the (optionally reordered or filtered) set.
+            return $records;
+        });
+
+        $this->afterTransformCollection(function (array $transformed, array $records) {
+            $total = count($transformed);
+
+            foreach ($transformed as &$attributes) {
+                $attributes['result_count'] = $total;
+            }
+
+            return $transformed;
+        });
+    }
+}
+```
+
+`beforeTransformCollection()` receives the raw result records before any record
+is transformed, letting you preload lookups, reorder or filter the set. Each
+record is then passed through the per-record transformer (so the record-level
+callbacks and schema mapping still apply), and `afterTransformCollection()`
+receives the full list of transformed attribute arrays alongside the raw records.
+Both callbacks may also accept the schema as a later argument.
+
+These callbacks apply to collections fetched through the API `index` endpoint as
+well as programmatic reads via `Repository::getRecords()`. When reshaping a
+collection for an API read, prefer `beforeTransformCollection()` for structural
+changes (reordering, filtering) so relationship includes stay aligned with their
+source records; `afterTransformCollection()` is best suited to enriching the
+transformed rows in place.
+
 ## Resource-level cache toggle
 
 Salesforce resource classes cache query results by default. To disable caching
@@ -300,4 +347,3 @@ $industries = IndustryLookup::all();
 ## License
 
 This package is released under the MIT license.
-
