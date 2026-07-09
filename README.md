@@ -6,7 +6,7 @@ A lightweight integration for interacting with Salesforce from PHP. The package 
 
 - **Salesforce HTTP client** built on Guzzle with convenience helpers for common endpoints.
 - **Fluent SOQL query builder** supporting nested conditions, `IN` clauses, ordering, limits and relationship includes.
-- **Repository layer** exposing `find`, `first`, `get`, `create`, `update`, `upsert`, `upsertRecord` and `delete` methods for Salesforce objects.
+- **Repository layer** exposing `find`, `first`, `get`, `create`, `update`, `upsert`, `upsertByIdentifier` and `delete` methods for Salesforce objects.
 - **Integration with garethhudson07/api** through repository and query bridge classes and a data transformer so that resources defined in that package can query Salesforce seamlessly.
 - **Laravel support** including a service provider for obtaining and caching OAuth tokens and optional request logging.
 - **Lookup utilities** for retrieving and caching pick list values.
@@ -54,7 +54,7 @@ The package divides caching into three independent layers via
   `flushQueryCache` method invalidates every cached query in one call by
   rotating an internal namespace token. The query cache is also flushed
   automatically by any repository mutation (`create`, `update`, `upsert`,
-  `upsertRecord`, `delete`).
+  `upsertByIdentifier`, `delete`).
 * **Entry cache** entries store individual records returned from `find` /
   `first` lookups for a longer TTL. Each cached entry is indexed under every
   configured "indexable field" (the record's `Id` by default, plus any extra

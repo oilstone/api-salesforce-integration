@@ -118,11 +118,13 @@ class Repository
         foreach ($this->defaultConstraints as $constraint) {
             if (is_array($constraint)) {
                 $query->where(...$constraint);
+
                 continue;
             }
 
             if (is_callable($constraint)) {
                 $constraint($query);
+
                 continue;
             }
 
@@ -141,6 +143,7 @@ class Repository
         foreach ($options['conditions'] ?? [] as $condition) {
             if (is_callable($condition)) {
                 $condition($query);
+
                 continue;
             }
 
@@ -216,7 +219,7 @@ class Repository
         $record = $this->find($idConditionsOrOptions, $options);
 
         if (! $record) {
-            throw new RecordNotFoundException();
+            throw new RecordNotFoundException;
         }
 
         return $record;
@@ -247,7 +250,7 @@ class Repository
         $record = $this->first($conditionsOrOptions, $options);
 
         if (! $record) {
-            throw new RecordNotFoundException();
+            throw new RecordNotFoundException;
         }
 
         return $record;
@@ -343,7 +346,21 @@ class Repository
         return $this->findOrFail([$this->defaultIdentifier => $id], ['skip_retrieval' => true]);
     }
 
-    public function upsertRecord(string $identifierValue, array $attributes, ?string $identifier = null): array
+    /**
+     * Upsert a record against a single identifier field using Salesforce's native upsert.
+     *
+     * Issues a PATCH to the sObject rows endpoint keyed on the identifier (the external-id endpoint
+     * when the identifier is not Id), so the match and write happen atomically in one request. When
+     * the identifier is an External ID field this is safe under concurrency: simultaneous callers
+     * converge on a single record rather than racing to create duplicates. Prefer this over upsert()
+     * whenever the match is a single External ID (or Id) field.
+     *
+     * @param  string  $identifierValue  Value to match on the identifier field.
+     * @param  array<string, mixed>  $attributes  Attributes to write on insert or update.
+     * @param  string|null  $identifier  Field to match on; defaults to the repository identifier
+     *                                   (Id). Must be an External ID or Id field.
+     */
+    public function upsertByIdentifier(string $identifierValue, array $attributes, ?string $identifier = null): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);
         $payload = $this->filterNullDefaults($payload, $attributes);
@@ -368,6 +385,21 @@ class Repository
         return $this->findOrFail([$identifier => $identifierValue], ['skip_retrieval' => true]);
     }
 
+    /**
+     * Upsert a record by matching on arbitrary conditions.
+     *
+     * This is a non-atomic query-then-write: it looks up an existing record matching every condition
+     * and updates it, or creates one when none is found. Because the lookup and the write are
+     * separate requests it is NOT safe under concurrency — two callers can both find nothing and both
+     * create, producing duplicates. Use it only for matches Salesforce's native upsert cannot
+     * express: multi-field conditions, or a single field that is not an External ID.
+     *
+     * When matching on a single External ID (or Id) field, use upsertByIdentifier() instead, which
+     * performs Salesforce's native, atomic upsert.
+     *
+     * @param  array<string, mixed>  $conditions  Field => value pairs to match an existing record.
+     * @param  array<string, mixed>  $attributes  Attributes to write on update or create.
+     */
     public function upsert(array $conditions, array $attributes): array
     {
         $existing = $this->first($conditions, ['skip_retrieval' => true]);

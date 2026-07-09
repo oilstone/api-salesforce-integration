@@ -11,14 +11,14 @@ use Api\Transformers\Contracts\Transformer;
 use ArgumentCountError;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Bridge\QueryResolver;
-use Oilstone\ApiSalesforceIntegration\Query;
-use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Collection as ApiResultCollection;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record as ApiResultRecord;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\TransformedRecord;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Transformers\Contracts\CollectionTransformer;
-use Oilstone\ApiSalesforceIntegration\RecordCollection;
+use Oilstone\ApiSalesforceIntegration\Query;
 use Oilstone\ApiSalesforceIntegration\Record;
+use Oilstone\ApiSalesforceIntegration\RecordCollection;
+use Oilstone\ApiSalesforceIntegration\Repository as BaseRepository;
 use Psr\Http\Message\ServerRequestInterface;
 use TypeError;
 
@@ -265,6 +265,37 @@ class Repository implements RepositoryInterface
     }
 
     /**
+     * Proxy the upsert method on the underlying repository with schema
+     * transformation of the provided conditions and values.
+     *
+     * Inherits upsert()'s non-atomic query-then-write behaviour; for a single
+     * External ID (or Id) match use upsertRecordByIdentifier() instead.
+     */
+    public function upsertRecord(array $conditions, array $values = [], ?string $object = null): Record
+    {
+        $matchConditions = $this->reverseConditions($conditions);
+        $valueFields = $this->reverseAttributes($values, true);
+
+        $record = $this->repository($object)->upsert($matchConditions, $valueFields);
+
+        return $this->transformRecord($record);
+    }
+
+    /**
+     * Proxy the upsertByIdentifier method on the underlying repository with schema
+     * transformation of the provided values, performing Salesforce's native atomic
+     * upsert against a single identifier field.
+     */
+    public function upsertRecordByIdentifier(string $identifierValue, array $values = [], ?string $identifier = null, ?string $object = null): Record
+    {
+        $valueFields = $this->reverseAttributes($values, true);
+
+        $record = $this->repository($object)->upsertByIdentifier($identifierValue, $valueFields, $identifier);
+
+        return $this->transformRecord($record);
+    }
+
+    /**
      * Proxy the get method on the underlying repository with optional
      * transformation of the returned records.
      */
@@ -358,7 +389,7 @@ class Repository implements RepositoryInterface
         $object ??= $this->object;
 
         if (! $object) {
-            throw new \Oilstone\ApiSalesforceIntegration\Exceptions\ObjectNotSpecifiedException();
+            throw new \Oilstone\ApiSalesforceIntegration\Exceptions\ObjectNotSpecifiedException;
         }
 
         return new BaseRepository(
@@ -381,7 +412,7 @@ class Repository implements RepositoryInterface
         $object ??= $this->object;
 
         if (! $object) {
-            throw new \Oilstone\ApiSalesforceIntegration\Exceptions\ObjectNotSpecifiedException();
+            throw new \Oilstone\ApiSalesforceIntegration\Exceptions\ObjectNotSpecifiedException;
         }
 
         return new BaseRepository(
@@ -433,7 +464,7 @@ class Repository implements RepositoryInterface
      * Transform a set of record arrays into domain records, bracketing the
      * per-record transformation with the collection-level hooks when present.
      *
-     * @param array<int, array> $records
+     * @param  array<int, array>  $records
      * @return array<int, Record>
      */
     protected function transformRecords(array $records): array
@@ -513,10 +544,9 @@ class Repository implements RepositoryInterface
     /**
      * Reverse transform only the provided attributes.
      *
-     * @param array $attributes
-     * @param bool $allowNull When true, `null` values will be retained instead
-     *                        of being filtered out.
-     * @param bool $force     When true, readonly and fixed field protection is bypassed.
+     * @param  bool  $allowNull  When true, `null` values will be retained instead
+     *                           of being filtered out.
+     * @param  bool  $force  When true, readonly and fixed field protection is bypassed.
      */
     protected function reverseAttributes(array $attributes, bool $allowNull = false, bool $force = false): array
     {
@@ -611,8 +641,8 @@ class Repository implements RepositoryInterface
     /**
      * Recursively extracts fields from a schema, handling nested schemas and aliasing.
      *
-     * @param Schema $schema The schema object to process.
-     * @param string $prefix The prefix to prepend to all fields found in this schema.
+     * @param  Schema  $schema  The schema object to process.
+     * @param  string  $prefix  The prefix to prepend to all fields found in this schema.
      * @return array A flat array of field names.
      */
     protected function extractSchemaFields($schema, string $prefix = ''): array
@@ -621,10 +651,10 @@ class Repository implements RepositoryInterface
 
         if ($schema->getPrimary()) {
             $primaryField = $schema->getPrimary()->alias ?: $schema->getPrimary()->getName();
-            $fields[] = $prefix . $primaryField;
+            $fields[] = $prefix.$primaryField;
         }
 
-        if (!$schema->getProperties()) {
+        if (! $schema->getProperties()) {
             return $fields;
         }
 
@@ -633,7 +663,7 @@ class Repository implements RepositoryInterface
                 $needs = is_array($property->needs) ? $property->needs : [$property->needs];
 
                 foreach ($needs as $need) {
-                    $fields[] = $prefix . $need;
+                    $fields[] = $prefix.$need;
                 }
             }
 
@@ -642,17 +672,17 @@ class Repository implements RepositoryInterface
             }
 
             if ($property->getType() === 'schema' && $property->getAccepts()) {
-                $nestedPrefix = $property->alias ? $property->alias . '.' : '';
+                $nestedPrefix = $property->alias ? $property->alias.'.' : '';
 
                 $nestedFields = $this->extractSchemaFields(
                     $property->getAccepts(),
-                    $prefix . $nestedPrefix
+                    $prefix.$nestedPrefix
                 );
 
                 $fields = array_merge($fields, $nestedFields);
             } else {
                 $fieldName = $property->alias ?: $property->getName();
-                $fields[] = $prefix . $fieldName;
+                $fields[] = $prefix.$fieldName;
             }
         }
 
@@ -682,8 +712,9 @@ class Repository implements RepositoryInterface
             $key = $property->alias ?: $property->getName();
 
             if ($property->getAccepts() instanceof Schema && $property->getType() !== 'collection') {
-                $nested = $this->extractSchemaDefaults($property->getAccepts(), $prefix . $key . '.');
+                $nested = $this->extractSchemaDefaults($property->getAccepts(), $prefix.$key.'.');
                 $defaults = array_replace_recursive($defaults, $nested);
+
                 continue;
             }
 
@@ -695,7 +726,7 @@ class Repository implements RepositoryInterface
                     $value = $value ? 'Yes' : 'No';
                 }
 
-                $path = explode('.', $prefix . $key);
+                $path = explode('.', $prefix.$key);
                 $current = &$defaults;
 
                 while (count($path) > 1) {
