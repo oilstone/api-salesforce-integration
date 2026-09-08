@@ -351,6 +351,65 @@ class Repository implements RepositoryInterface
     }
 
     /**
+     * Proxy createMany on the underlying repository, reverse transforming each record
+     * through the configured transformer. Returns Salesforce's SaveResults in request
+     * order; there is no read-back, so nothing is transformed on the way out.
+     *
+     * @param  array<int, array<string, mixed>>  $records
+     * @return array<int, array>
+     */
+    public function createManyRecords(array $records, bool $allOrNone = true, ?string $object = null): array
+    {
+        return $this->repository($object)->createMany($this->reverseMany($records), $allOrNone);
+    }
+
+    /**
+     * As createManyRecords(), bypassing readonly and fixed field protections.
+     *
+     * @param  array<int, array<string, mixed>>  $records
+     * @return array<int, array>
+     */
+    public function forceCreateManyRecords(array $records, bool $allOrNone = true, ?string $object = null): array
+    {
+        return $this->repository($object)->createMany($this->reverseMany($records, true), $allOrNone);
+    }
+
+    /**
+     * Proxy upsertManyByIdentifier on the underlying repository, reverse transforming
+     * each record through the configured transformer. The identifier is a Salesforce
+     * field name, as for upsertRecordByIdentifier(). Returns UpsertResults in request order.
+     *
+     * @param  array<int, array<string, mixed>>  $records
+     * @return array<int, array>
+     */
+    public function upsertManyRecordsByIdentifier(array $records, ?string $identifier = null, bool $allOrNone = true, ?string $object = null): array
+    {
+        return $this->repository($object)->upsertManyByIdentifier($this->reverseMany($records), $identifier, $allOrNone);
+    }
+
+    /**
+     * As upsertManyRecordsByIdentifier(), bypassing readonly and fixed field protections.
+     *
+     * @param  array<int, array<string, mixed>>  $records
+     * @return array<int, array>
+     */
+    public function forceUpsertManyRecordsByIdentifier(array $records, ?string $identifier = null, bool $allOrNone = true, ?string $object = null): array
+    {
+        return $this->repository($object)->upsertManyByIdentifier($this->reverseMany($records, true), $identifier, $allOrNone);
+    }
+
+    /**
+     * Proxy deleteMany on the underlying repository. Returns DeleteResults in request order.
+     *
+     * @param  array<int, string>  $ids
+     * @return array<int, array>
+     */
+    public function deleteManyRecords(array $ids, bool $allOrNone = true, ?string $object = null): array
+    {
+        return $this->repository($object)->deleteMany($ids, $allOrNone);
+    }
+
+    /**
      * Proxy the get method on the underlying repository with optional
      * transformation of the returned records.
      */
@@ -618,6 +677,19 @@ class Repository implements RepositoryInterface
             : $this->transformer->reverse($attributes);
 
         return $allowNull ? $reversed : array_filter($reversed, fn ($value) => isset($value));
+    }
+
+    /**
+     * Reverse transform a list of records for a batch write, as reverseAttributes() does
+     * for one.
+     *
+     * @param  array<int, array<string, mixed>>  $records
+     * @param  bool  $force  When true, readonly and fixed field protection is bypassed.
+     * @return array<int, array<string, mixed>>
+     */
+    protected function reverseMany(array $records, bool $force = false): array
+    {
+        return array_map(fn (array $record) => $this->reverseAttributes($record, true, $force), array_values($records));
     }
 
     /**

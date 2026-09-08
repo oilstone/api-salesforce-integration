@@ -6,7 +6,7 @@ A lightweight integration for interacting with Salesforce from PHP. The package 
 
 - **Salesforce HTTP client** built on Guzzle with convenience helpers for common endpoints.
 - **Fluent SOQL query builder** supporting nested conditions, `IN` clauses, ordering, limits and relationship includes. `LIKE` values keep any `%` wildcard you supply and fall back to a contains match when none is given; `null`, booleans and `DateTimeInterface` values are written as proper SOQL literals, and `Query::raw()` wraps date functions such as `LAST_N_DAYS:7`.
-- **Repository layer** exposing `find`, `first`, `get`, `create`, `update`, `upsert`, `upsertByIdentifier` and `delete` methods for Salesforce objects. Writes re-read the record in the same HTTP round trip via the Composite API, or skip the re-read entirely with `setRefreshAfterWrite(false)`.
+- **Repository layer** exposing `find`, `first`, `get`, `create`, `update`, `upsert`, `upsertByIdentifier` and `delete` methods for Salesforce objects. Writes re-read the record in the same HTTP round trip via the Composite API, or skip the re-read entirely with `setRefreshAfterWrite(false)`. `createMany`, `upsertManyByIdentifier` and `deleteMany` write up to 200 records per request via sObject Collections.
 - **Integration with garethhudson07/api** through repository and query bridge classes and a data transformer so that resources defined in that package can query Salesforce seamlessly.
 - **Laravel support** including a service provider for obtaining and caching OAuth tokens and optional request logging.
 - **Lookup utilities** for retrieving and caching pick list values.
@@ -234,6 +234,62 @@ $repository->create($attributes, ['refresh' => false]);
 // or for every write on this repository
 $repository->setRefreshAfterWrite(false);
 ```
+
+## Batch writes with sObject Collections
+
+`createMany`, `upsertManyByIdentifier` and `deleteMany` send up to 200 records
+per request through Salesforce's sObject Collections resource. One request is
+one API call against org limits, whatever its size. Larger inputs are split
+into sequential chunks of 200; `allOrNone` applies per request, so it does not
+make the whole call atomic across chunks.
+
+These methods trade the read-back and the pre-write stale read of the
+single-record methods for round trips. They return Salesforce's result lists
+(`SaveResult`, `UpsertResult`, `DeleteResult`) in request order, so results map
+to inputs positionally. A failed record raises `SalesforceCollectionException`
+with the per-record errors, the raw results and, for upserts, the identifier
+value of each failure. With `allOrNone` (the default) Salesforce has already
+rolled the request back by then.
+
+The pattern they exist for is a two-stage write: upsert a set of parents by
+external id, read the returned ids positionally, then create the dependants in
+a second call:
+
+```php
+$orders = (new Repository('Order'))->setClient($salesforce);
+$items = (new Repository('OrderItem'))->setClient($salesforce);
+
+$orderResults = $orders->upsertManyByIdentifier([
+    ['External_Id__c' => 'ORD-1', 'AccountId' => $accountId, 'Status' => 'Draft'],
+    ['External_Id__c' => 'ORD-2', 'AccountId' => $accountId, 'Status' => 'Draft'],
+], 'External_Id__c');
+
+$lines = [];
+
+foreach ($units as $index => $unit) {
+    $lines[] = [
+        'OrderId' => $orderResults[$unit['order']]['id'],
+        'Product2Id' => $unit['product'],
+        'Quantity' => 1,
+        'UnitPrice' => $unit['price'],
+    ];
+}
+
+$items->createMany($lines);
+
+$items->deleteMany($staleItemIds);
+```
+
+Repositories built on the `garethhudson07/api` adapter expose the same three
+as `createManyRecords`, `upsertManyRecordsByIdentifier` and `deleteManyRecords`,
+which reverse each record through the schema transformer before sending it.
+`forceCreateManyRecords` and `forceUpsertManyRecordsByIdentifier` bypass
+readonly and fixed field protections, as the single-record `force` methods do.
+
+Entry cache invalidation after a batch write uses the payload values only, so
+an entry cached under an indexable field's previous value survives until its
+TTL. Prefer the single-record methods when you need the stored record back or
+when indexable fields other than the identifier change on existing records.
 
 ## Selecting fields on single-record reads
 

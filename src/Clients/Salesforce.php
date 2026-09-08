@@ -11,6 +11,11 @@ use Psr\Log\LoggerInterface;
 
 class Salesforce
 {
+    /**
+     * Maximum records per sObject Collections request.
+     */
+    public const COLLECTION_LIMIT = 200;
+
     protected Client $httpClient;
 
     protected string $instanceUrl;
@@ -203,6 +208,114 @@ class Salesforce
         $url = $this->instanceUrl.$this->sobjectRowPath($object, $id, $identifier);
 
         return $this->request('DELETE', $url, ['log_request' => true]);
+    }
+
+    /**
+     * Create up to 200 records in one request via sObject Collections. Each record must carry
+     * its own attributes.type; the collection may mix types.
+     *
+     * Returns Salesforce's SaveResult list in request order. Individual records can fail with
+     * an HTTP 200, so inspect each result's "success" flag; the repository does this for you.
+     *
+     * @param  array<int, array>  $records
+     * @return array<int, array>
+     */
+    public function createMany(array $records, bool $allOrNone = true): array
+    {
+        if ($records === []) {
+            return [];
+        }
+
+        $this->assertCollectionSize($records, 'records');
+
+        return $this->request('POST', $this->instanceUrl.$this->apiPath('composite/sobjects'), [
+            'json' => [
+                'allOrNone' => $allOrNone,
+                'records' => array_values($records),
+            ],
+            'log_request' => true,
+        ]);
+    }
+
+    /**
+     * Upsert up to 200 records of one type by an external id field via sObject Collections.
+     * The identifier value goes on each record as an ordinary field. attributes.type is set
+     * from $object when a record does not carry it, and Id is never sent unless Id is the
+     * identifier.
+     *
+     * Returns Salesforce's UpsertResult list in request order.
+     *
+     * @param  array<int, array>  $records
+     * @return array<int, array>
+     */
+    public function upsertMany(string $object, string $identifier, array $records, bool $allOrNone = true): array
+    {
+        if ($records === []) {
+            return [];
+        }
+
+        $this->assertCollectionSize($records, 'records');
+
+        $object = trim($object, '/');
+        $identifier = trim($identifier, '/');
+
+        $records = array_map(static function (array $record) use ($object, $identifier): array {
+            if ($identifier !== 'Id') {
+                unset($record['Id']);
+            }
+
+            $record['attributes'] = array_merge(
+                ['type' => $object],
+                is_array($record['attributes'] ?? null) ? $record['attributes'] : []
+            );
+
+            return $record;
+        }, array_values($records));
+
+        return $this->request('PATCH', $this->instanceUrl.$this->apiPath('composite/sobjects/'.$object.'/'.$identifier), [
+            'json' => [
+                'allOrNone' => $allOrNone,
+                'records' => $records,
+            ],
+            'log_request' => true,
+        ]);
+    }
+
+    /**
+     * Delete up to 200 records by Id in one request via sObject Collections.
+     *
+     * Returns Salesforce's DeleteResult list in request order.
+     *
+     * @param  array<int, string>  $ids
+     * @return array<int, array>
+     */
+    public function deleteMany(array $ids, bool $allOrNone = true): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $this->assertCollectionSize($ids, 'ids');
+
+        return $this->request('DELETE', $this->instanceUrl.$this->apiPath('composite/sobjects'), [
+            'query' => [
+                'ids' => implode(',', array_values($ids)),
+                'allOrNone' => $allOrNone ? 'true' : 'false',
+            ],
+            'log_request' => true,
+        ]);
+    }
+
+    protected function assertCollectionSize(array $items, string $noun): void
+    {
+        if (count($items) > self::COLLECTION_LIMIT) {
+            throw new \InvalidArgumentException(sprintf(
+                'sObject Collections accept at most %d %s per request, %d given.',
+                self::COLLECTION_LIMIT,
+                $noun,
+                count($items)
+            ));
+        }
     }
 
     /**

@@ -5,6 +5,7 @@ namespace Oilstone\ApiSalesforceIntegration;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 use Oilstone\ApiSalesforceIntegration\Exceptions\RecordNotFoundException;
+use Oilstone\ApiSalesforceIntegration\Exceptions\SalesforceCollectionException;
 
 class Repository
 {
@@ -521,6 +522,111 @@ class Repository
         return $this->create(array_replace_recursive($attributes, $conditions), $options);
     }
 
+    /**
+     * Create many records in as few requests as possible using sObject Collections.
+     *
+     * Each record gets the same treatment as create(): schema defaults are merged in and null
+     * defaults dropped. Records are sent in chunks of 200, one request per chunk, sequentially.
+     * $allOrNone applies per request, so it does not give atomicity across chunks: a failure
+     * in chunk two leaves chunk one committed and is raised as a SalesforceCollectionException
+     * carrying the per-record errors.
+     *
+     * Unlike create() there is no read-back, which is the round trips this method exists to
+     * remove. The return value is the list of SaveResults exactly as Salesforce returns them,
+     * concatenated across chunks in request order, so results map to the input positionally.
+     * Reach for create() instead when you need the stored record (server-computed fields,
+     * includes) back.
+     *
+     * @param  array<int, array<string, mixed>>  $records
+     * @return array<int, array>
+     */
+    public function createMany(array $records, bool $allOrNone = true): array
+    {
+        $payloads = array_map(fn (array $record) => $this->batchPayload($record), array_values($records));
+
+        return $this->sendBatches(
+            $payloads,
+            fn (array $chunk) => $this->getClient()->createMany($chunk, $allOrNone),
+            fn (array $chunk) => $this->invalidateAfterBatch($chunk),
+        );
+    }
+
+    /**
+     * Upsert many records against a single identifier field in as few requests as possible,
+     * using Salesforce's native upsert via sObject Collections.
+     *
+     * Like upsertByIdentifier(), the match and write are atomic per record and safe under
+     * concurrency when the identifier is an External ID (or Id) field: simultaneous callers
+     * converge on one record. Every record must carry a value for the identifier; a missing
+     * value is rejected here because Salesforce would silently insert instead.
+     *
+     * Records are sent in chunks of 200, one request per chunk, sequentially. $allOrNone
+     * applies per request, so it does not give atomicity across chunks. A failed record raises
+     * a SalesforceCollectionException that names the identifier value of each failure.
+     *
+     * There is no read-back and no pre-write read of the current record: invalidation of the
+     * entry cache uses the payload only, so an entry cached under an indexable field's previous
+     * value survives until its TTL. Prefer upsertByIdentifier() when you need the stored record
+     * back or indexable fields other than the identifier change on existing records.
+     *
+     * @param  array<int, array<string, mixed>>  $records
+     * @param  string|null  $identifier  Field to match on; defaults to the repository identifier.
+     * @return array<int, array>  UpsertResults in request order
+     */
+    public function upsertManyByIdentifier(array $records, ?string $identifier = null, bool $allOrNone = true): array
+    {
+        $identifier ??= $this->defaultIdentifier;
+
+        $payloads = [];
+
+        foreach (array_values($records) as $index => $record) {
+            $payload = $this->batchPayload($record);
+            $value = $payload[$identifier] ?? null;
+
+            if ($value === null || $value === '' || is_array($value)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Record %d has no value for the %s identifier; Salesforce would insert it instead of upserting.',
+                    $index,
+                    $identifier
+                ));
+            }
+
+            $payloads[] = $payload;
+        }
+
+        return $this->sendBatches(
+            $payloads,
+            fn (array $chunk) => $this->getClient()->upsertMany($this->object, $identifier, $chunk, $allOrNone),
+            fn (array $chunk) => $this->invalidateAfterBatch($chunk, [
+                $identifier => array_column($chunk, $identifier),
+            ]),
+            fn (array $chunk) => array_column($chunk, $identifier),
+        );
+    }
+
+    /**
+     * Delete many records by identifier value in as few requests as possible using sObject
+     * Collections. Ids are sent in chunks of 200, one request per chunk, sequentially;
+     * $allOrNone applies per request, not across chunks.
+     *
+     * There is no pre-write read, so entries cached under indexable fields other than the
+     * identifier survive until their TTL. Prefer delete() when that matters.
+     *
+     * @param  array<int, string>  $ids
+     * @return array<int, array>  DeleteResults in request order
+     */
+    public function deleteMany(array $ids, bool $allOrNone = true): array
+    {
+        $ids = array_values(array_map('strval', $ids));
+
+        return $this->sendBatches(
+            $ids,
+            fn (array $chunk) => $this->getClient()->deleteMany($chunk, $allOrNone),
+            fn (array $chunk) => $this->invalidateAfterBatch([], [$this->defaultIdentifier => $chunk]),
+            fn (array $chunk) => $chunk,
+        );
+    }
+
     public function delete(string $id): array
     {
         $lookup = [$this->defaultIdentifier => $id];
@@ -677,6 +783,97 @@ class Repository
         $record = $results['refresh']['body']['records'][0] ?? null;
 
         return [$stale, $write, is_array($record) ? $record : null];
+    }
+
+    /**
+     * A record prepared for a collection request: defaults applied as create() applies them,
+     * typed for this repository's object.
+     */
+    protected function batchPayload(array $record): array
+    {
+        $payload = array_replace_recursive($this->defaultValues, $record);
+        $payload = $this->filterNullDefaults($payload, $record);
+
+        $payload['attributes'] = ['type' => $this->object];
+
+        return $payload;
+    }
+
+    /**
+     * Send items in chunks of the collection limit, one request each, stopping at the first
+     * chunk with a failed record. Successful chunks are invalidated before a later failure is
+     * raised. Results are returned in request order.
+     *
+     * @param  \Closure(array): array  $send  performs the request for one chunk
+     * @param  \Closure(array): void  $invalidate  invalidates the cache for one chunk
+     * @param  (\Closure(array): array)|null  $identifiers  identifier value per item in a chunk
+     * @return array<int, array>
+     */
+    protected function sendBatches(array $items, \Closure $send, \Closure $invalidate, ?\Closure $identifiers = null): array
+    {
+        $results = [];
+
+        foreach (array_chunk($items, Salesforce::COLLECTION_LIMIT) as $chunk) {
+            $chunkResults = array_values($send($chunk));
+
+            $invalidate($chunk);
+
+            foreach ($chunkResults as $result) {
+                if (($result['success'] ?? false) !== true) {
+                    throw SalesforceCollectionException::fromResults($chunkResults, $identifiers ? $identifiers($chunk) : []);
+                }
+            }
+
+            $results = array_merge($results, $chunkResults);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Invalidate after a collection write: one namespace rotation for the object and one
+     * token rotation covering every identifier and indexable value in the payloads. Payload
+     * values only; there is no stale read in the batch paths.
+     *
+     * @param  array<int, array>  $payloads
+     * @param  array<string, array<int, mixed>>  $identities  field => values known outside the payloads
+     */
+    protected function invalidateAfterBatch(array $payloads, array $identities = []): void
+    {
+        if (! $this->cacheHandler) {
+            return;
+        }
+
+        $this->cacheHandler->flushQueryCacheForObject($this->object);
+
+        $conditions = [];
+
+        foreach ($identities as $field => $values) {
+            foreach ($values as $value) {
+                if ($value !== null && ! is_array($value)) {
+                    $conditions[$field][] = $value;
+                }
+            }
+        }
+
+        foreach ($payloads as $payload) {
+            foreach ($this->indexableFields as $field) {
+                $value = $payload[$field] ?? null;
+
+                if ($value !== null && ! is_array($value)) {
+                    $conditions[$field][] = $value;
+                }
+            }
+        }
+
+        if ($conditions === []) {
+            return;
+        }
+
+        $this->cacheHandler->forgetEntryByConditions(
+            $this->object,
+            array_map(static fn (array $values) => array_values(array_unique($values, SORT_REGULAR)), $conditions)
+        );
     }
 
     /**
