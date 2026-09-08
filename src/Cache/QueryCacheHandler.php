@@ -147,44 +147,22 @@ class QueryCacheHandler
 
     public function rememberEntry(Query $query, string $soql, callable $callback, array $options = []): mixed
     {
-        $signature = $query->getConditionSignature();
+        $keys = $this->entryKeys($query);
 
-        if ($signature === []) {
+        if ($keys === null) {
             return $callback();
         }
 
-        $object = (string) $query->getObject();
-        $identifier = $query->getIdentifier();
-        $indexableFields = $query->getIndexableFields() ?: [$identifier];
-        $select = $this->normaliseArray($query->getSelectSignature());
-        $context = ['object' => $object, 'conditions' => $signature];
+        $context = ['object' => $keys['object'], 'conditions' => $keys['signature']];
         $shouldLog = (bool) ($options['log_request'] ?? false);
 
-        $versionKeys = $this->conditionVersionKeys($object, $query->getConditions(), $indexableFields);
-        $versionTokens = $versionKeys ? array_values($this->tokens($versionKeys, $this->entryTtl)) : [];
-
-        $pointerKey = $this->entryPrefix.'ptr.'.md5(json_encode([
-            'object' => strtolower($object),
-            'conditions' => $this->normaliseArray($signature),
-            'select' => $select,
-            'versions' => $versionTokens,
-        ], JSON_THROW_ON_ERROR));
-
         if (! $this->shouldSkipRetrieval($options)) {
-            $pointer = $this->cache->get($pointerKey, $this->missing);
+            $cached = $this->readEntry($keys['pointer']);
 
-            if (is_array($pointer) && isset($pointer[self::POINTER_KEY]) && count($pointer) === 1) {
-                $record = $this->cache->get($pointer[self::POINTER_KEY], $this->missing);
+            if ($cached !== $this->missing) {
+                $shouldLog && $this->log($soql, $cached, 'entry', $context);
 
-                if ($record !== $this->missing) {
-                    $shouldLog && $this->log($soql, $record, 'entry', $context);
-
-                    return $record;
-                }
-            } elseif ($pointer !== $this->missing) {
-                $shouldLog && $this->log($soql, $pointer, 'entry', $context);
-
-                return $pointer;
+                return $cached;
             }
         }
 
@@ -197,24 +175,87 @@ class QueryCacheHandler
             return null;
         }
 
-        $idValue = is_array($value) ? $this->fieldValue($value, $identifier) : null;
+        $idValue = is_array($value) ? $this->fieldValue($value, $keys['identifier']) : null;
 
         if ($idValue === null || is_array($idValue) || is_object($idValue)) {
             // No usable identifier in the record: store it inline. It can only be invalidated
             // through the version tokens of the fields it was looked up by, or by TTL.
-            $this->cache->set($pointerKey, $value, $this->entryTtl);
+            $this->cache->set($keys['pointer'], $value, $this->entryTtl);
         } else {
-            $recordKey = $this->entryRecordKey($object, $identifier, $idValue, $select);
+            $recordKey = $this->entryRecordKey($keys['object'], $keys['identifier'], $idValue, $keys['select']);
 
             $this->cache->setMultiple([
                 $recordKey => $value,
-                $pointerKey => [self::POINTER_KEY => $recordKey],
+                $keys['pointer'] => [self::POINTER_KEY => $recordKey],
             ], $this->entryTtl);
         }
 
         $shouldLog && $this->log($soql, $value, 'entry', $context);
 
         return $value;
+    }
+
+    /**
+     * Cache-only lookup of the entry a first()/find() with this query would return. Never
+     * calls Salesforce; null when the query has no conditions or nothing is cached.
+     */
+    public function getEntry(Query $query): mixed
+    {
+        $keys = $this->entryKeys($query);
+
+        if ($keys === null) {
+            return null;
+        }
+
+        $cached = $this->readEntry($keys['pointer']);
+
+        return $cached === $this->missing ? null : $cached;
+    }
+
+    /**
+     * Resolve the pointer key and the pieces of the record key for a single-record query.
+     *
+     * @return array{object: string, identifier: string, signature: array, select: array, pointer: string}|null
+     */
+    protected function entryKeys(Query $query): ?array
+    {
+        $signature = $query->getConditionSignature();
+
+        if ($signature === []) {
+            return null;
+        }
+
+        $object = (string) $query->getObject();
+        $identifier = $query->getIdentifier();
+        $indexableFields = $query->getIndexableFields() ?: [$identifier];
+        $select = $this->normaliseArray($query->getSelectSignature());
+
+        $versionKeys = $this->conditionVersionKeys($object, $query->getConditions(), $indexableFields);
+        $versionTokens = $versionKeys ? array_values($this->tokens($versionKeys, $this->entryTtl)) : [];
+
+        $pointer = $this->entryPrefix.'ptr.'.md5(json_encode([
+            'object' => strtolower($object),
+            'conditions' => $this->normaliseArray($signature),
+            'select' => $select,
+            'versions' => $versionTokens,
+        ], JSON_THROW_ON_ERROR));
+
+        return compact('object', 'identifier', 'signature', 'select', 'pointer');
+    }
+
+    /**
+     * Follow a pointer to its record, or return the inline value. Returns the miss sentinel
+     * when neither is present.
+     */
+    protected function readEntry(string $pointerKey): mixed
+    {
+        $pointer = $this->cache->get($pointerKey, $this->missing);
+
+        if (is_array($pointer) && isset($pointer[self::POINTER_KEY]) && count($pointer) === 1) {
+            return $this->cache->get($pointer[self::POINTER_KEY], $this->missing);
+        }
+
+        return $pointer;
     }
 
     /**

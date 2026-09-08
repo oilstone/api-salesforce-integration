@@ -97,9 +97,12 @@ $repository = (new Repository('Contact'))
 
 Only register fields that uniquely identify a record. Non-unique fields (e.g.
 `Status`) are not appropriate as indexable fields. When a repository has
-indexable fields beyond its identifier, mutations first read the current record
-(from the entry cache when possible) so entries keyed under the old value of a
-changed field are invalidated as well as the new one.
+indexable fields beyond its identifier, mutations need the record's current
+values so entries keyed under the old value of a changed field are invalidated
+as well as the new one. That read comes from the entry cache when the record is
+there; otherwise it is sent as the first subrequest of the same composite call
+as the write (selecting only the indexable fields), so it never costs a
+separate HTTP request.
 
 Invalidation tokens are memoised per process so each request reads them at
 most once. The Laravel service provider resets that memo at queue job and
@@ -221,8 +224,9 @@ unless you narrow it:
 $repository->update($id, ['Name' => 'Acme'], ['select' => ['Id', 'Name', 'LastModifiedDate']]);
 ```
 
-When you do not need the stored record back, skip the read altogether. The
-methods then return the payload merged with the identifier:
+The re-read selects the repository's default fields (see below), falling back
+to `FIELDS(ALL)`. When you do not need the stored record back, skip the read
+altogether. The methods then return the payload merged with the identifier:
 
 ```php
 $repository->create($attributes, ['refresh' => false]);
@@ -231,8 +235,35 @@ $repository->create($attributes, ['refresh' => false]);
 $repository->setRefreshAfterWrite(false);
 ```
 
-Repositories created through the `garethhudson07/api` adapter select the
-schema's fields on the re-read automatically.
+## Selecting fields on single-record reads
+
+`find`, `first`, `firstOrCreate` and the re-read after a write select
+`FIELDS(ALL)` when nothing narrower is known. That returns every column,
+including long text areas, and the query cache stores all of it. Give the
+repository a default select so those reads only fetch what you use:
+
+```php
+$repository = (new Repository('Account'))
+    ->setClient($salesforce)
+    ->setDefaultSelect(['Id', 'Name', 'Industry']);
+
+$repository->find($id);                                   // SELECT Id, Name, Industry ...
+$repository->find($id, ['select' => ['Id', 'Website']]);  // an explicit select still wins
+```
+
+Repositories created through the `garethhudson07/api` adapter set this to the
+schema's field list automatically, so API-driven reads and write re-reads never
+use `FIELDS(ALL)`.
+
+In a nested route such as `/accounts/{id}/contacts` the framework resolves the
+account only to scope the contact query, so the adapter selects just `Id`, the
+identifier and the relation's local key for that ancestor lookup. If your
+application reads other attributes from an ancestor pipe's result (for example
+in a CRUD event listener), register them on the resource's repository:
+
+```php
+$repository->setAncestorFields(['Name', 'OwnerId']);
+```
 
 ## Apex REST requests
 

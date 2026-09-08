@@ -4,6 +4,7 @@ namespace Oilstone\ApiSalesforceIntegration\Integrations\Api;
 
 use Api\Pipeline\Pipes\Pipe;
 use Api\Repositories\Contracts\Resource as RepositoryInterface;
+use Api\Resources\Relations\Relation;
 use Api\Result\Contracts\Collection as ResultCollectionInterface;
 use Api\Result\Contracts\Record as ResultRecordInterface;
 use Api\Schema\Schema;
@@ -37,6 +38,11 @@ class Repository implements RepositoryInterface
     protected string $identifier = 'Id';
 
     protected array $indexableFields = [];
+
+    /**
+     * @var array<int, string>
+     */
+    protected array $ancestorFields = [];
 
     public function __construct(
         protected ?string $object = null,
@@ -111,11 +117,60 @@ class Repository implements RepositoryInterface
         return $this->indexableFields;
     }
 
+    /**
+     * Resolve an ancestor pipe in a nested route (e.g. the account in /accounts/{id}/contacts).
+     * The framework only reads the relation's local key from this record to scope the child
+     * query, so select just the keys involved rather than the whole record.
+     */
     public function getByKey(Pipe $pipe): ?ResultRecordInterface
     {
-        $result = $this->repository()->find($pipe->getKey());
+        $result = $this->repository()->find($pipe->getKey(), [
+            'select' => $this->ancestorSelect($pipe),
+        ]);
 
         return $result ? ApiResultRecord::make($result) : null;
+    }
+
+    /**
+     * Fields to select when this resource is resolved as an ancestor: the identifier, Id, the
+     * local key of the relation the next pipe is scoped through, and any extra ancestor fields
+     * the application registered.
+     *
+     * @return array<int, string>
+     */
+    protected function ancestorSelect(Pipe $pipe): array
+    {
+        $fields = ['Id', $this->identifier];
+
+        $next = $pipe->descendants()[0] ?? null;
+        $relation = $next?->getEntity();
+
+        if ($relation instanceof Relation) {
+            $localKey = $relation->getLocalKey();
+
+            if (is_string($localKey) && $localKey !== '') {
+                $fields[] = $localKey;
+            }
+        }
+
+        return array_values(array_unique(array_merge($fields, $this->ancestorFields)));
+    }
+
+    /**
+     * Register extra fields to select when this resource is resolved as an ancestor, for
+     * application code (event listeners, scopes) that reads more than the relation key from
+     * the ancestor record.
+     */
+    public function setAncestorFields(array $fields): static
+    {
+        $this->ancestorFields = array_values(array_unique(array_filter($fields, 'is_string')));
+
+        return $this;
+    }
+
+    public function getAncestorFields(): array
+    {
+        return $this->ancestorFields;
     }
 
     public function getCollection(Pipe $pipe, ServerRequestInterface $request): ResultCollectionInterface
@@ -144,7 +199,7 @@ class Repository implements RepositoryInterface
 
         $fields = $this->reverseAttributes($request->getParsedBody()?->toArray() ?? [], true);
 
-        $record = $repository->create($fields, $this->writeOptions());
+        $record = $repository->create($fields, []);
 
         return ApiResultRecord::make($record);
     }
@@ -158,7 +213,7 @@ class Repository implements RepositoryInterface
 
         $fields = $this->reverseAttributes($request->getParsedBody()?->toArray() ?? [], true);
 
-        $record = $repository->update($id, $fields, $this->writeOptions());
+        $record = $repository->update($id, $fields, []);
 
         return ApiResultRecord::make($record);
     }
@@ -182,7 +237,7 @@ class Repository implements RepositoryInterface
     {
         $fields = $this->reverseAttributes($attributes, true);
 
-        $record = $this->repository($object)->create($fields, $this->writeOptions($options));
+        $record = $this->repository($object)->create($fields, $options);
 
         return $this->transformRecord($record);
     }
@@ -194,7 +249,7 @@ class Repository implements RepositoryInterface
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
-        $record = $this->repository($object)->create($fields, $this->writeOptions($options));
+        $record = $this->repository($object)->create($fields, $options);
 
         return $this->transformRecord($record);
     }
@@ -207,7 +262,7 @@ class Repository implements RepositoryInterface
     {
         $fields = $this->reverseAttributes($attributes, true);
 
-        $record = $this->repository($object)->update($id, $fields, $this->writeOptions($options));
+        $record = $this->repository($object)->update($id, $fields, $options);
 
         return $this->transformRecord($record);
     }
@@ -219,7 +274,7 @@ class Repository implements RepositoryInterface
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
-        $record = $this->repository($object)->update($id, $fields, $this->writeOptions($options));
+        $record = $this->repository($object)->update($id, $fields, $options);
 
         return $this->transformRecord($record);
     }
@@ -245,7 +300,7 @@ class Repository implements RepositoryInterface
         $attrs = $this->reverseConditions($attributes);
         $extraFields = $this->reverseAttributes($extra, true);
 
-        $record = $this->repository($object)->firstOrCreate($attrs, $extraFields, $this->writeOptions($options));
+        $record = $this->repository($object)->firstOrCreate($attrs, $extraFields, $options);
 
         return $this->transformRecord($record);
     }
@@ -259,7 +314,7 @@ class Repository implements RepositoryInterface
         $attrs = $this->reverseConditions($attributes);
         $valueFields = $this->reverseAttributes($values, true);
 
-        $record = $this->repository($object)->updateOrCreate($attrs, $valueFields, $this->writeOptions($options));
+        $record = $this->repository($object)->updateOrCreate($attrs, $valueFields, $options);
 
         return $this->transformRecord($record);
     }
@@ -276,7 +331,7 @@ class Repository implements RepositoryInterface
         $matchConditions = $this->reverseConditions($conditions);
         $valueFields = $this->reverseAttributes($values, true);
 
-        $record = $this->repository($object)->upsert($matchConditions, $valueFields, $this->writeOptions($options));
+        $record = $this->repository($object)->upsert($matchConditions, $valueFields, $options);
 
         return $this->transformRecord($record);
     }
@@ -290,7 +345,7 @@ class Repository implements RepositoryInterface
     {
         $valueFields = $this->reverseAttributes($values, true);
 
-        $record = $this->repository($object)->upsertByIdentifier($identifierValue, $valueFields, $identifier, $this->writeOptions($options));
+        $record = $this->repository($object)->upsertByIdentifier($identifierValue, $valueFields, $identifier, $options);
 
         return $this->transformRecord($record);
     }
@@ -384,17 +439,6 @@ class Repository implements RepositoryInterface
         return $this->transformRecord($record);
     }
 
-    /**
-     * Options for a write: re-read only the schema's fields rather than FIELDS(ALL), unless
-     * the caller chose otherwise.
-     */
-    protected function writeOptions(array $options = []): array
-    {
-        $options['select'] = $options['select'] ?? $this->getDefaultFields();
-
-        return $options;
-    }
-
     public function repository(?string $object = null): BaseRepository
     {
         $object ??= $this->object;
@@ -403,6 +447,7 @@ class Repository implements RepositoryInterface
             throw new \Oilstone\ApiSalesforceIntegration\Exceptions\ObjectNotSpecifiedException;
         }
 
+        // Single-record reads and write re-reads select the schema's fields, never FIELDS(ALL).
         return new BaseRepository(
             $object,
             $this->defaultConstraints,
@@ -412,6 +457,7 @@ class Repository implements RepositoryInterface
             $this->cacheHandler,
             null,
             $this->indexableFields,
+            $this->getDefaultFields(),
         );
     }
 

@@ -276,6 +276,15 @@ class Salesforce
         ];
     }
 
+    public function deleteSubrequest(string $referenceId, string $object, string $id, string $identifier = 'Id'): array
+    {
+        return [
+            'method' => 'DELETE',
+            'url' => $this->sobjectRowPath($object, $id, $identifier),
+            'referenceId' => $referenceId,
+        ];
+    }
+
     public function querySubrequest(string $referenceId, string $soql): array
     {
         // Encode the SOQL but keep any "@{reference.field}" tokens intact so Salesforce can
