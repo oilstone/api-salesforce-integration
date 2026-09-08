@@ -6,16 +6,48 @@ use Oilstone\ApiSalesforceIntegration\Query;
 use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
 
+/**
+ * Three independent cache layers, all invalidated by rotating opaque tokens rather than
+ * by deleting keys:
+ *
+ *  - Query cache: SOQL results. The key folds in a global namespace token plus one token per
+ *    Salesforce object the query reads (root object and any included child objects), so a
+ *    mutation invalidates only queries that touch the mutated object.
+ *  - Entry cache: single records from first()/find(). A lookup is stored as a small pointer
+ *    (keyed by conditions, selected fields and the version tokens of any indexable field the
+ *    conditions match on) that references the record (keyed by identifier value, selected
+ *    fields and the identifier's version token). Rotating a version token orphans every key
+ *    that embedded it, so invalidation is a single write with no read-modify-write window.
+ *  - Schema cache: describe and picklist payloads under their own namespace token.
+ *
+ * Tokens are memoised in-process so a request reads each one at most once. Call
+ * resetLocalState() at request/job boundaries in long-running processes.
+ */
 class QueryCacheHandler
 {
     protected string $queryPrefix = 'salesforce.query.';
     protected string $entryPrefix = 'salesforce.entry.';
     protected string $schemaPrefix = 'salesforce.schema.';
     protected string $queryNamespaceKey = 'salesforce.query.namespace';
+    protected string $queryObjectNamespacePrefix = 'salesforce.query.namespace.';
     protected string $schemaNamespaceKey = 'salesforce.schema.namespace';
-    protected string $entryIndexPrefix = 'salesforce.entry_index.';
+    protected string $entryVersionPrefix = 'salesforce.entry.version.';
+
+    /** Reserved key marking a pointer entry; Salesforce field names can never contain "@". */
+    protected const POINTER_KEY = '@ref';
 
     protected bool $skipRetrievalByDefault = false;
+
+    /** Sentinel returned by the cache on a miss, so hit detection is a single round trip. */
+    protected object $missing;
+
+    /**
+     * In-process token memo, keyed by cache store instance then token key. Static so the
+     * per-resource clones of this handler share one view of the tokens within a request.
+     *
+     * @var array<string, array<string, string>>
+     */
+    protected static array $tokenMemo = [];
 
     public function __construct(
         protected CacheInterface $cache,
@@ -23,7 +55,9 @@ class QueryCacheHandler
         protected ?int $entryTtl = null,
         protected ?LoggerInterface $logger = null,
         protected ?int $schemaTtl = null,
-    ) {}
+    ) {
+        $this->missing = new \stdClass;
+    }
 
     public function setLogger(?LoggerInterface $logger): static
     {
@@ -65,35 +99,50 @@ class QueryCacheHandler
         return $this;
     }
 
-    public function remember(string $key, callable $callback, array $tags = [], array $options = []): mixed
+    /**
+     * Forget every memoised token. Call at the start of each request or job in a
+     * long-running process so tokens rotated by other processes are picked up.
+     */
+    public static function resetLocalState(): void
     {
-        return $this->rememberQuery($key, $callback, $options);
+        static::$tokenMemo = [];
     }
 
-    public function rememberQuery(string $soql, callable $callback, array $options = []): mixed
+    /**
+     * Alias of rememberQuery() kept for backwards compatibility.
+     */
+    public function remember(string $key, callable $callback, array $options = [], array $objects = []): mixed
     {
-        return $this->rememberWithNamespace(
-            $soql,
-            $callback,
-            $this->queryPrefix,
-            $this->queryNamespaceKey,
-            $this->queryTtl,
-            'query',
-            $options
-        );
+        return $this->rememberQuery($key, $callback, $options, $objects);
+    }
+
+    /**
+     * @param  array<int, string>  $objects  Salesforce objects the query reads. Pass the root object
+     *                                       and any included child objects; an empty list falls back
+     *                                       to the global namespace only.
+     */
+    public function rememberQuery(string $soql, callable $callback, array $options = [], array $objects = []): mixed
+    {
+        $tokenKeys = [$this->queryNamespaceKey];
+
+        foreach ($this->normaliseObjects($objects) as $object) {
+            $tokenKeys[] = $this->objectNamespaceKey($object);
+        }
+
+        $tokens = $this->tokens($tokenKeys);
+
+        $cacheKey = $this->queryPrefix.md5(json_encode([array_values($tokens), $soql], JSON_THROW_ON_ERROR));
+
+        return $this->rememberKey($cacheKey, $soql, $callback, $this->queryTtl, 'query', $options);
     }
 
     public function rememberSchema(string $key, callable $callback, array $options = []): mixed
     {
-        return $this->rememberWithNamespace(
-            $key,
-            $callback,
-            $this->schemaPrefix,
-            $this->schemaNamespaceKey,
-            $this->schemaTtl,
-            'schema',
-            $options
-        );
+        $tokens = $this->tokens([$this->schemaNamespaceKey]);
+
+        $cacheKey = $this->schemaPrefix.reset($tokens).'.'.md5($key);
+
+        return $this->rememberKey($cacheKey, $key, $callback, $this->schemaTtl, 'schema', $options);
     }
 
     public function rememberEntry(Query $query, string $soql, callable $callback, array $options = []): mixed
@@ -104,122 +153,233 @@ class QueryCacheHandler
             return $callback();
         }
 
-        $indexableFields = $query->getIndexableFields();
+        $object = (string) $query->getObject();
+        $identifier = $query->getIdentifier();
+        $indexableFields = $query->getIndexableFields() ?: [$identifier];
+        $select = $this->normaliseArray($query->getSelectSignature());
+        $context = ['object' => $object, 'conditions' => $signature];
+        $shouldLog = (bool) ($options['log_request'] ?? false);
 
-        if ($indexableFields === []) {
-            $indexableFields = [$query->getIdentifier()];
-        }
+        $versionKeys = $this->conditionVersionKeys($object, $query->getConditions(), $indexableFields);
+        $versionTokens = $versionKeys ? array_values($this->tokens($versionKeys, $this->entryTtl)) : [];
 
-        $cacheKey = $this->buildEntryCacheKey($query->getObject(), $signature);
-        $context = ['object' => $query->getObject(), 'conditions' => $signature];
+        $pointerKey = $this->entryPrefix.'ptr.'.md5(json_encode([
+            'object' => strtolower($object),
+            'conditions' => $this->normaliseArray($signature),
+            'select' => $select,
+            'versions' => $versionTokens,
+        ], JSON_THROW_ON_ERROR));
 
-        $skipRetrieval = $this->shouldSkipRetrieval($options);
+        if (! $this->shouldSkipRetrieval($options)) {
+            $pointer = $this->cache->get($pointerKey, $this->missing);
 
-        if (! $skipRetrieval && $this->cache->has($cacheKey)) {
-            $value = $this->cache->get($cacheKey);
+            if (is_array($pointer) && isset($pointer[self::POINTER_KEY]) && count($pointer) === 1) {
+                $record = $this->cache->get($pointer[self::POINTER_KEY], $this->missing);
 
-            if ($options['log_request'] ?? false) {
-                $this->log($soql, $value, 'entry', $context);
+                if ($record !== $this->missing) {
+                    $shouldLog && $this->log($soql, $record, 'entry', $context);
+
+                    return $record;
+                }
+            } elseif ($pointer !== $this->missing) {
+                $shouldLog && $this->log($soql, $pointer, 'entry', $context);
+
+                return $pointer;
             }
-
-            return $value;
         }
 
         $value = $callback();
 
         if ($value === null) {
-            if ($options['log_request'] ?? false) {
-                $this->log($soql, $value, 'entry', $context);
-            }
+            // Negative results are deliberately not cached.
+            $shouldLog && $this->log($soql, $value, 'entry', $context);
 
-            return $value;
+            return null;
         }
 
-        $this->cache->set($cacheKey, $value, $this->entryTtl);
+        $idValue = is_array($value) ? $this->fieldValue($value, $identifier) : null;
 
-        if (is_array($value)) {
-            $this->registerEntryIndexFromRecord($query->getObject(), $indexableFields, $value, $cacheKey);
+        if ($idValue === null || is_array($idValue) || is_object($idValue)) {
+            // No usable identifier in the record: store it inline. It can only be invalidated
+            // through the version tokens of the fields it was looked up by, or by TTL.
+            $this->cache->set($pointerKey, $value, $this->entryTtl);
+        } else {
+            $recordKey = $this->entryRecordKey($object, $identifier, $idValue, $select);
+
+            $this->cache->setMultiple([
+                $recordKey => $value,
+                $pointerKey => [self::POINTER_KEY => $recordKey],
+            ], $this->entryTtl);
         }
 
-        if ($options['log_request'] ?? false) {
-            $this->log($soql, $value, 'entry', $context);
-        }
+        $shouldLog && $this->log($soql, $value, 'entry', $context);
 
         return $value;
     }
 
+    /**
+     * Invalidate every cached entry that was looked up by, or resolved to a record carrying,
+     * the given field values.
+     *
+     * @param  array<string, mixed|array<int, mixed>>  $conditions  field => value, or field => list of values
+     */
     public function forgetEntryByConditions(string $object, array $conditions): void
     {
-        if ($conditions === []) {
-            return;
-        }
+        $keys = [];
 
-        $keysToDelete = [];
-
-        foreach ($conditions as $field => $value) {
-            if (! is_string($field) || $value === null) {
+        foreach ($conditions as $field => $values) {
+            if (! is_string($field)) {
                 continue;
             }
 
-            $indexKey = $this->buildEntryIndexKey($object, $field, $value);
-            $cacheKeys = $this->cache->get($indexKey);
+            $values = is_array($values) && array_is_list($values) ? $values : [$values];
 
-            if (is_array($cacheKeys)) {
-                foreach ($cacheKeys as $cacheKey) {
-                    $keysToDelete[$cacheKey] = true;
+            foreach ($values as $value) {
+                if ($value === null) {
+                    continue;
                 }
-            }
 
-            $this->cache->delete($indexKey);
+                $keys[] = $this->entryVersionKey($object, $field, $value);
+            }
         }
 
-        foreach (array_keys($keysToDelete) as $cacheKey) {
-            $this->cache->delete($cacheKey);
+        if ($keys) {
+            $this->rotate($keys, $this->entryTtl);
         }
     }
 
+    /**
+     * Invalidate every cached query, regardless of object.
+     */
     public function flushQueryCache(): void
     {
-        $this->cache->set($this->queryNamespaceKey, $this->generateNamespace());
+        $this->rotate([$this->queryNamespaceKey]);
+    }
+
+    /**
+     * Invalidate cached queries that read any of the given objects.
+     *
+     * @param  string|array<int, string>  $objects
+     */
+    public function flushQueryCacheForObject(string|array $objects): void
+    {
+        $keys = array_map(
+            fn (string $object) => $this->objectNamespaceKey($object),
+            $this->normaliseObjects((array) $objects)
+        );
+
+        if ($keys) {
+            $this->rotate($keys);
+        }
     }
 
     public function flushSchemaCache(): void
     {
-        $this->cache->set($this->schemaNamespaceKey, $this->generateNamespace());
+        $this->rotate([$this->schemaNamespaceKey]);
     }
 
-    protected function rememberWithNamespace(
-        string $originalKey,
+    protected function rememberKey(
+        string $cacheKey,
+        string $logKey,
         callable $callback,
-        string $prefix,
-        string $namespaceKey,
         ?int $ttl,
         string $type,
         array $options
     ): mixed {
-        $cacheKey = $prefix . $this->getNamespace($namespaceKey) . '.' . md5($originalKey);
+        $shouldLog = (bool) ($options['log_request'] ?? false);
 
-        $skipRetrieval = $this->shouldSkipRetrieval($options);
+        if (! $this->shouldSkipRetrieval($options)) {
+            $value = $this->cache->get($cacheKey, $this->missing);
 
-        if (! $skipRetrieval && $this->cache->has($cacheKey)) {
-            $value = $this->cache->get($cacheKey);
+            if ($value !== $this->missing) {
+                $shouldLog && $this->log($logKey, $value, $type);
 
-            if ($options['log_request'] ?? false) {
-                $this->log($originalKey, $value, $type);
+                return $value;
             }
-
-            return $value;
         }
 
         $value = $callback();
 
         $this->cache->set($cacheKey, $value, $ttl);
 
-        if ($options['log_request'] ?? false) {
-            $this->log($originalKey, $value, $type);
-        }
+        $shouldLog && $this->log($logKey, $value, $type);
 
         return $value;
+    }
+
+    /**
+     * Resolve tokens for the given keys, reading any that are not memoised in one round trip
+     * and creating any that do not exist yet.
+     *
+     * @param  array<int, string>  $keys
+     * @return array<string, string>  key => token, in the order given
+     */
+    protected function tokens(array $keys, ?int $ttl = null): array
+    {
+        $keys = array_values(array_unique($keys));
+        $memo = &static::$tokenMemo[$this->memoKey()];
+        $memo ??= [];
+
+        $unknown = array_values(array_filter($keys, static fn (string $key) => ! isset($memo[$key])));
+
+        if ($unknown !== []) {
+            $fetched = $this->cache->getMultiple($unknown, $this->missing);
+            $create = [];
+
+            foreach ($fetched as $key => $value) {
+                if (is_string($value) && $value !== '') {
+                    $memo[$key] = $value;
+                }
+            }
+
+            foreach ($unknown as $key) {
+                if (! isset($memo[$key])) {
+                    $create[$key] = $this->generateNamespace();
+                }
+            }
+
+            if ($create !== []) {
+                $this->cache->setMultiple($create, $ttl);
+
+                foreach ($create as $key => $token) {
+                    $memo[$key] = $token;
+                }
+            }
+        }
+
+        $tokens = [];
+
+        foreach ($keys as $key) {
+            $tokens[$key] = $memo[$key];
+        }
+
+        return $tokens;
+    }
+
+    /**
+     * Replace the tokens under the given keys with fresh values, in one round trip.
+     *
+     * @param  array<int, string>  $keys
+     */
+    protected function rotate(array $keys, ?int $ttl = null): void
+    {
+        $memo = &static::$tokenMemo[$this->memoKey()];
+        $memo ??= [];
+
+        $values = [];
+
+        foreach (array_unique($keys) as $key) {
+            $values[$key] = $memo[$key] = $this->generateNamespace();
+        }
+
+        if ($values !== []) {
+            $this->cache->setMultiple($values, $ttl);
+        }
+    }
+
+    protected function memoKey(): string
+    {
+        return (string) spl_object_id($this->cache);
     }
 
     protected function shouldSkipRetrieval(array $options): bool
@@ -240,7 +400,7 @@ class QueryCacheHandler
         $payload = array_merge($context, [
             'key' => $key,
             'method' => 'GET',
-            'url' => 'cache:' . $type,
+            'url' => 'cache:'.$type,
             'status' => 200,
             'cache' => true,
             'response' => is_array($response) ? $response : ['value' => $response],
@@ -253,72 +413,128 @@ class QueryCacheHandler
         $this->logger->debug('Salesforce request', $payload);
     }
 
-    protected function buildEntryCacheKey(string $object, array $signature): string
+    /**
+     * Version-token keys for every indexable field the conditions constrain by equality.
+     *
+     * @return array<int, string>
+     */
+    protected function conditionVersionKeys(string $object, array $conditions, array $indexableFields): array
     {
-        $normalised = $this->normaliseArray($signature);
+        $keys = [];
 
-        return $this->entryPrefix . md5(json_encode([
-            'object' => $object,
-            'conditions' => $normalised,
-        ], JSON_THROW_ON_ERROR));
-    }
+        foreach ($conditions as $condition) {
+            if (($condition['type'] ?? null) !== 'basic' || ($condition['operator'] ?? null) !== '=') {
+                continue;
+            }
 
-    protected function buildEntryIndexKey(string $object, string $field, mixed $value): string
-    {
-        return $this->entryIndexPrefix . md5(json_encode([
-            'object' => $object,
-            'field' => $field,
-            'value' => $this->normaliseValue($value),
-        ], JSON_THROW_ON_ERROR));
-    }
+            $field = $this->matchField((string) $condition['field'], $indexableFields);
+            $value = $condition['value'] ?? null;
 
-    protected function getNamespace(string $key): string
-    {
-        $namespace = $this->cache->get($key);
+            if ($field === null || $value === null || is_array($value)) {
+                continue;
+            }
 
-        if (! is_string($namespace) || $namespace === '') {
-            $namespace = $this->generateNamespace();
-            $this->cache->set($key, $namespace);
+            $keys[] = $this->entryVersionKey($object, $field, $value);
         }
 
-        return $namespace;
+        return array_values(array_unique($keys));
+    }
+
+    protected function entryRecordKey(string $object, string $identifier, mixed $idValue, array $select): string
+    {
+        $tokens = $this->tokens([$this->entryVersionKey($object, $identifier, $idValue)], $this->entryTtl);
+
+        return $this->entryPrefix.'rec.'.md5(json_encode([
+            'object' => strtolower($object),
+            'identifier' => strtolower($identifier),
+            'id' => $this->normaliseScalar($idValue),
+            'select' => $select,
+            'version' => reset($tokens),
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    protected function entryVersionKey(string $object, string $field, mixed $value): string
+    {
+        return $this->entryVersionPrefix.md5(json_encode([
+            strtolower(trim($object)),
+            strtolower(trim($field)),
+            $this->normaliseScalar($value),
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    protected function objectNamespaceKey(string $object): string
+    {
+        return $this->queryObjectNamespacePrefix.strtolower(trim($object));
+    }
+
+    /**
+     * @return array<int, string>  lower-cased, de-duplicated object names
+     */
+    protected function normaliseObjects(array $objects): array
+    {
+        $objects = array_filter(array_map(
+            static fn ($object) => is_string($object) ? strtolower(trim($object, " /")) : '',
+            $objects
+        ));
+
+        return array_values(array_unique($objects));
+    }
+
+    protected function matchField(string $field, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && strcasecmp($candidate, $field) === 0) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    protected function fieldValue(array $record, string $field): mixed
+    {
+        if (array_key_exists($field, $record)) {
+            return $record[$field];
+        }
+
+        foreach ($record as $key => $value) {
+            if (is_string($key) && strcasecmp($key, $field) === 0) {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     protected function generateNamespace(): string
     {
         try {
             return bin2hex(random_bytes(10));
-        } catch (\Throwable $exception) {
+        } catch (\Throwable) {
             return (string) microtime(true);
         }
     }
 
-    protected function registerEntryIndexFromRecord(string $object, array $indexableFields, array $record, string $cacheKey): void
+    /**
+     * Canonical string form of a scalar-ish value so "001" and 001 share a token.
+     */
+    protected function normaliseScalar(mixed $value): string
     {
-        foreach ($indexableFields as $field) {
-            if (! is_string($field) || ! array_key_exists($field, $record)) {
-                continue;
-            }
-
-            $value = $record[$field];
-
-            if ($value === null) {
-                continue;
-            }
-
-            $indexKey = $this->buildEntryIndexKey($object, $field, $value);
-            $cacheKeys = $this->cache->get($indexKey);
-
-            if (! is_array($cacheKeys)) {
-                $cacheKeys = [];
-            }
-
-            if (! in_array($cacheKey, $cacheKeys, true)) {
-                $cacheKeys[] = $cacheKey;
-            }
-
-            $this->cache->set($indexKey, $cacheKeys, $this->entryTtl);
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
         }
+
+        if (is_array($value)) {
+            return json_encode($this->normaliseArray($value), JSON_THROW_ON_ERROR);
+        }
+
+        if (is_object($value)) {
+            $value = $this->normaliseValue($value);
+
+            return is_string($value) ? $value : json_encode($value, JSON_THROW_ON_ERROR);
+        }
+
+        return (string) $value;
     }
 
     protected function normaliseValue(mixed $value): mixed
@@ -344,45 +560,24 @@ class QueryCacheHandler
 
     protected function normaliseArray(array $data): array
     {
-        $normalised = [];
+        $isList = array_is_list($data);
 
-        $isAssoc = $this->isAssociative($data);
-
-        if ($isAssoc) {
+        if (! $isList) {
             ksort($data);
         }
 
-        foreach ($data as $key => $value) {
-            if (is_array($value)) {
-                $value = $this->normaliseArray($value);
-            } elseif (is_object($value)) {
-                if ($value instanceof \DateTimeInterface) {
-                    $value = $value->format(\DateTimeInterface::ATOM);
-                } elseif (method_exists($value, '__toString')) {
-                    $value = (string) $value;
-                } else {
-                    $value = serialize($value);
-                }
-            }
+        $normalised = [];
 
-            if ($isAssoc) {
-                $normalised[$key] = $value;
-            } else {
+        foreach ($data as $key => $value) {
+            $value = $this->normaliseValue($value);
+
+            if ($isList) {
                 $normalised[] = $value;
+            } else {
+                $normalised[$key] = $value;
             }
         }
 
         return $normalised;
-    }
-
-    protected function isAssociative(array $data): bool
-    {
-        if (function_exists('array_is_list')) {
-            return ! array_is_list($data);
-        }
-
-        $keys = array_keys($data);
-
-        return $keys !== array_keys($keys);
     }
 }

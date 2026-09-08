@@ -6,6 +6,7 @@ use Api\Exceptions\InvalidQueryArgumentsException;
 use Api\Exceptions\UnknownOperatorException;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
+use Oilstone\ApiSalesforceIntegration\Values\RawValue;
 
 class Query
 {
@@ -34,6 +35,14 @@ class Query
     protected array $cacheOptions = [];
 
     protected array $indexableFields = [];
+
+    /**
+     * Child objects pulled in through relationship includes, so cached results for this
+     * query are invalidated when any of them changes.
+     *
+     * @var array<int, string>
+     */
+    protected array $relatedObjects = [];
 
     public function __construct(string $object, Salesforce $client, string $identifier = 'Id')
     {
@@ -72,6 +81,14 @@ class Query
     public static function make(string $object, Salesforce $client, string $identifier = 'Id'): static
     {
         return new static($object, $client, $identifier);
+    }
+
+    /**
+     * Wrap a value so it is written into SOQL verbatim (unquoted).
+     */
+    public static function raw(string $value): RawValue
+    {
+        return new RawValue($value);
     }
 
     public function getObject(): ?string
@@ -127,6 +144,10 @@ class Query
         $root = $rootRelationship['relationshipName'] ?? $parts[0];
         $rootObject = $rootRelationship['childSObject'] ?? null;
 
+        if ($rootObject) {
+            $this->trackRelatedObject($rootObject);
+        }
+
         if (! isset($this->relationshipGroups[$root])) {
             $this->relationshipGroups[$root] = ['fields' => [], 'subqueries' => []];
         }
@@ -141,7 +162,15 @@ class Query
 
         $path = implode('.', array_slice($parts, 1));
 
-        if ($this->isNestedChildRelationshipPath($rootObject, $path)) {
+        $nestedRelationship = $rootObject && ! str_contains($path, '.')
+            ? $this->childRelationshipMetadata($rootObject, $path)
+            : null;
+
+        if ($nestedRelationship) {
+            if (! empty($nestedRelationship['childSObject'])) {
+                $this->trackRelatedObject($nestedRelationship['childSObject']);
+            }
+
             $subquery = $this->compileNestedSubquery($path, $fields);
             $this->relationshipGroups[$root]['subqueries'][$subquery] = true;
 
@@ -188,13 +217,33 @@ class Query
         return $fieldList;
     }
 
-    protected function isNestedChildRelationshipPath(?string $object, string $path): bool
+    protected function trackRelatedObject(string $object): void
     {
-        if (! $object || str_contains($path, '.')) {
-            return false;
+        foreach ($this->relatedObjects as $existing) {
+            if (strcasecmp($existing, $object) === 0) {
+                return;
+            }
         }
 
-        return (bool) $this->childRelationshipMetadata($object, $path);
+        $this->relatedObjects[] = $object;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function getRelatedObjects(): array
+    {
+        return $this->relatedObjects;
+    }
+
+    /**
+     * Every object this query reads: the root object plus included child objects.
+     *
+     * @return array<int, string>
+     */
+    public function getCacheObjects(): array
+    {
+        return array_merge([$this->object], $this->relatedObjects);
     }
 
     protected function compileNestedSubquery(string $relationship, string $fields): string
@@ -202,36 +251,6 @@ class Query
         $fieldString = implode(', ', $this->normaliseFieldList($fields));
 
         return sprintf('(SELECT %s FROM %s)', $fieldString, $relationship);
-    }
-
-    protected function compileInclude(string $relation): string
-    {
-        [$relation, $fields] = $this->splitIncludeAndFields($relation);
-
-        $parts = explode('.', $relation, 2);
-
-        $child = $parts[0];
-        $childRelationship = $this->childRelationshipName($child) ?? $child;
-
-        $prefix = null;
-        if (count($parts) > 1) {
-            $prefix = $this->normaliseTraversalPath($parts[1]);
-        }
-
-        $fieldList = $this->normaliseFieldList($fields);
-
-        if ($prefix) {
-            $fieldList = array_map(fn ($field) => sprintf('%s.%s', $prefix, $field), $fieldList);
-        }
-
-        $fieldString = implode(', ', $fieldList);
-
-        return sprintf('(SELECT %s FROM %s)', $fieldString, $childRelationship);
-    }
-
-    protected function childRelationshipName(string $object): ?string
-    {
-        return $this->childRelationshipMetadata($this->object, $object)['relationshipName'] ?? null;
     }
 
     protected function childRelationshipMetadata(string $object, string $relationshipOrChildObject): ?array
@@ -258,7 +277,12 @@ class Query
 
     public function select(array|string $columns): static
     {
-        $this->selects = is_array($columns) ? $columns : explode(',', $columns);
+        $columns = is_array($columns) ? $columns : explode(',', $columns);
+
+        $this->selects = array_values(array_filter(
+            array_map(static fn ($column) => trim((string) $column), $columns),
+            static fn (string $column) => $column !== ''
+        ));
 
         return $this;
     }
@@ -376,7 +400,7 @@ class Query
         $options = array_merge(['log_request' => true], $this->cacheOptions);
 
         $results = $this->cacheHandler
-            ? $this->cacheHandler->rememberQuery($soql, $callback, $options)
+            ? $this->cacheHandler->rememberQuery($soql, $callback, $options, $this->getCacheObjects())
             : $callback();
 
         return $results;
@@ -384,8 +408,10 @@ class Query
 
     public function first(): ?array
     {
-        $this->limit(1);
-        $soql = $this->toSoql();
+        $query = clone $this;
+        $query->limit = 1;
+
+        $soql = $query->toSoql();
 
         $callback = function () use ($soql) {
             $results = $this->client->query($soql);
@@ -396,7 +422,7 @@ class Query
         $options = array_merge(['log_request' => true], $this->cacheOptions);
 
         $result = $this->cacheHandler
-            ? $this->cacheHandler->rememberEntry($this, $soql, $callback, $options)
+            ? $this->cacheHandler->rememberEntry($query, $soql, $callback, $options)
             : $callback();
 
         return $result ?? null;
@@ -438,26 +464,21 @@ class Query
 
     public function count(): int
     {
-        $originalSelects = $this->selects;
-        $originalRelationships = $this->relationships;
-        $originalRelationshipGroups = $this->relationshipGroups;
+        // COUNT() must be the only item in the SELECT list and cannot be combined with ORDER BY.
+        $query = clone $this;
+        $query->selects = ['COUNT()'];
+        $query->relationships = [];
+        $query->relationshipGroups = [];
+        $query->orders = [];
 
-        $this->selects = ['COUNT()'];
-        $this->relationships = [];
-        $this->relationshipGroups = [];
-
-        $soql = $this->toSoql();
-
-        $this->selects = $originalSelects;
-        $this->relationships = $originalRelationships;
-        $this->relationshipGroups = $originalRelationshipGroups;
+        $soql = $query->toSoql();
 
         $callback = fn () => $this->client->rawQuery($soql);
 
         $options = array_merge(['log_request' => true], $this->cacheOptions);
 
         $result = $this->cacheHandler
-            ? $this->cacheHandler->rememberQuery($soql, $callback, $options)
+            ? $this->cacheHandler->rememberQuery($soql, $callback, $options, $this->getCacheObjects())
             : $callback();
 
         return $result['totalSize'] ?? 0;
@@ -471,6 +492,19 @@ class Query
     public function getConditionSignature(): array
     {
         return $this->mapConditionsForSignature($this->conditions);
+    }
+
+    /**
+     * Describe which fields and relationships this query selects, so cached results
+     * are never shared between queries that return different columns.
+     */
+    public function getSelectSignature(): array
+    {
+        return [
+            'selects' => array_values(array_map('trim', $this->selects ?: [$this->identifier])),
+            'relationships' => array_values($this->relationships),
+            'relationshipGroups' => $this->relationshipGroups,
+        ];
     }
 
     public function getOrders(): array
@@ -514,7 +548,7 @@ class Query
         }, $conditions);
     }
 
-    protected function toSoql(): string
+    public function toSoql(): string
     {
         $groupedRelationships = array_map(function (string $relation, array $parts) {
             $fields = array_keys($parts['fields']);
@@ -562,7 +596,17 @@ class Query
             }
 
             if ($condition['type'] === 'in') {
-                $values = array_map(fn($v) => $this->formatValue($v), $condition['values']);
+                $inValues = is_array($condition['values']) ? $condition['values'] : [$condition['values']];
+
+                if ($inValues === []) {
+                    // "IN ()" is a SOQL syntax error. Every sObject has a non-null Id, so these
+                    // literals are always-false (IN) and always-true (NOT IN) respectively.
+                    $sql .= $condition['operator'] === 'in' ? 'Id = null' : 'Id != null';
+
+                    continue;
+                }
+
+                $values = array_map(fn($v) => $this->formatValue($v), $inValues);
 
                 $sql .= sprintf(
                     '%s %s (%s)',
@@ -578,7 +622,15 @@ class Query
             $operator = $condition['operator'];
 
             if ($operator === 'like') {
-                $value = "'%".addslashes(trim($value, '%'))."%'";
+                $value = (string) $value;
+
+                // Preserve caller-supplied wildcards (e.g. "Acme%" prefix searches). Only fall
+                // back to a contains search when no wildcard was given.
+                if (! str_contains($value, '%')) {
+                    $value = '%'.$value.'%';
+                }
+
+                $value = "'".addslashes($value)."'";
                 $operator = 'LIKE';
             } else {
                 $value = $this->formatValue($value);
@@ -593,12 +645,27 @@ class Query
 
     protected function formatValue($value): string
     {
+        if ($value === null) {
+            return 'null';
+        }
+
+        if ($value instanceof RawValue) {
+            return (string) $value;
+        }
+
         if (is_bool($value)) {
             return $value ? 'TRUE' : 'FALSE';
         }
 
         if (is_int($value) || is_float($value)) {
             return (string) $value;
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            // SOQL datetime literals are unquoted ISO 8601 values.
+            return \DateTimeImmutable::createFromInterface($value)
+                ->setTimezone(new \DateTimeZone('UTC'))
+                ->format('Y-m-d\TH:i:s\Z');
         }
 
         return "'".addslashes((string) $value)."'";

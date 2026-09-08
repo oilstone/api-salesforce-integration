@@ -6,6 +6,7 @@ use Api\Queries\Expression;
 use Api\Queries\Paths\Path;
 use Api\Queries\Relations as RequestRelations;
 use Oilstone\ApiSalesforceIntegration\Query as SalesforceQuery;
+use Oilstone\ApiSalesforceIntegration\Values\RawValue;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Collection;
 use Oilstone\ApiSalesforceIntegration\Integrations\Api\Results\Record;
 use Carbon\Carbon;
@@ -150,47 +151,67 @@ class Query
         }
 
         if ($property) {
-            switch ($property->getType()) {
-                case 'boolean':
-                    if (is_string($value)) {
-                        $lower = strtolower($value);
-                        if (in_array($lower, ['true', '1', 'yes'])) {
-                            $value = 1;
-                        } elseif (in_array($lower, ['false', '0', 'no'])) {
-                            $value = 0;
-                        }
-                    }
+            $type = $property->getType();
 
-                    $value = $value ? 1 : 0;
-                    break;
-
-                case 'integer':
-                    $value = $value !== null ? (int) $value : $value;
-                    break;
-
-                case 'float':
-                case 'decimal':
-                case 'number':
-                    $value = $value !== null ? (float) $value : $value;
-                    break;
-
-                case 'date':
-                    if ($value) {
-                        $value = Carbon::parse($value)->toDateString();
-                    }
-                    break;
-
-                case 'datetime':
-                case 'timestamp':
-                    if ($value) {
-                        $value = Carbon::parse($value)->toDateTimeString();
-                    }
-                    break;
-            }
+            $value = is_array($value)
+                ? array_map(fn ($item) => $this->castValue($type, $item), $value)
+                : $this->castValue($type, $value);
 
             if ($property->hasMeta('isYesNo') && $value !== null) {
-                $value = $value ? 'Yes' : 'No';
+                $value = is_array($value)
+                    ? array_map(fn ($item) => $item ? 'Yes' : 'No', $value)
+                    : ($value ? 'Yes' : 'No');
             }
+        }
+
+        return $value;
+    }
+
+    /**
+     * Cast a single constraint value to the representation SOQL expects for the
+     * property type. Booleans become real booleans (SOQL requires TRUE/FALSE, not
+     * 1/0) and date/datetime values become unquoted ISO 8601 literals.
+     */
+    protected function castValue(?string $type, mixed $value): mixed
+    {
+        switch ($type) {
+            case 'boolean':
+                if (is_string($value)) {
+                    $lower = strtolower(trim($value));
+
+                    if (in_array($lower, ['true', '1', 'yes'], true)) {
+                        return true;
+                    }
+
+                    if (in_array($lower, ['false', '0', 'no'], true)) {
+                        return false;
+                    }
+                }
+
+                return (bool) $value;
+
+            case 'integer':
+                return $value !== null ? (int) $value : null;
+
+            case 'float':
+            case 'decimal':
+            case 'number':
+                return $value !== null ? (float) $value : null;
+
+            case 'date':
+                if ($value instanceof RawValue || ! $value) {
+                    return $value;
+                }
+
+                return new RawValue(Carbon::parse($value)->toDateString());
+
+            case 'datetime':
+            case 'timestamp':
+                if ($value instanceof RawValue || ! $value) {
+                    return $value;
+                }
+
+                return new RawValue(Carbon::parse($value)->utc()->format('Y-m-d\TH:i:s\Z'));
         }
 
         return $value;

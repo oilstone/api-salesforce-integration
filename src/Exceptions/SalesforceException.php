@@ -10,7 +10,14 @@ class SalesforceException extends Exception
 
     public function __construct(array $errors, int $code)
     {
-        parent::__construct($errors[0]['message'] ?? 'Salesforce error', $code);
+        $first = $errors[0] ?? [];
+
+        $message = $first['message']
+            ?? $first['error_description']
+            ?? $first['error']
+            ?? 'Salesforce error';
+
+        parent::__construct((string) $message, $code);
         $this->errors = $errors;
     }
 
@@ -21,9 +28,25 @@ class SalesforceException extends Exception
 
     public static function fromResponse(ResponseInterface $response): self
     {
-        $data = json_decode((string) $response->getBody(), true) ?: [];
-        $errors = isset($data[0]) ? $data : [$data];
+        $status = $response->getStatusCode();
+        $body = (string) $response->getBody();
+        $data = json_decode($body, true);
 
-        return new self($errors, $response->getStatusCode());
+        if (is_array($data) && $data !== []) {
+            $errors = array_is_list($data) ? $data : [$data];
+        } else {
+            // Non-JSON bodies (HTML error pages, proxies, empty 5xx) would otherwise
+            // surface as a bare "Salesforce error" with no detail.
+            $summary = trim(preg_replace('/\s+/', ' ', preg_replace('/<[^>]*>/', ' ', $body) ?? '') ?? '');
+            $message = sprintf('HTTP %d %s', $status, $response->getReasonPhrase());
+
+            if ($summary !== '') {
+                $message .= ': '.mb_substr($summary, 0, 200);
+            }
+
+            $errors = [['message' => $message, 'errorCode' => 'HTTP_'.$status]];
+        }
+
+        return new self($errors, $status);
     }
 }

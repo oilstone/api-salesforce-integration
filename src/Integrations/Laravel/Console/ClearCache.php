@@ -27,12 +27,19 @@ class ClearCache extends Command
         $id = $this->argument('id');
         $field = (string) $this->option('field');
 
-        $handler->flushQueryCache();
+        if (! $resource) {
+            $handler->flushQueryCache();
+            $this->info('Cleared Salesforce query cache for all objects.');
 
-        if ($resource && $id) {
+            return 0;
+        }
+
+        $handler->flushQueryCacheForObject((string) $resource);
+
+        if ($id) {
             $handler->forgetEntryByConditions((string) $resource, [$field => $id]);
             $this->info(sprintf(
-                'Cleared query cache and entry cache for %s where %s = %s.',
+                'Cleared query cache for %1$s and entry cache for %1$s where %2$s = %3$s.',
                 $resource,
                 $field,
                 $id
@@ -41,7 +48,7 @@ class ClearCache extends Command
             return 0;
         }
 
-        $this->info('Cleared Salesforce query cache.');
+        $this->info(sprintf('Cleared Salesforce query cache for %s.', $resource));
 
         return 0;
     }

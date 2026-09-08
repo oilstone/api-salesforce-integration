@@ -69,5 +69,32 @@ class ServiceProvider extends BaseServiceProvider
         $this->commands([
             ClearCache::class,
         ]);
+
+        $this->resetCacheTokensAtBoundaries();
+    }
+
+    /**
+     * The cache handler memoises invalidation tokens per process. In long-running workers
+     * (queues, Octane) drop that memo at each job / request boundary so rotations made by
+     * other processes are observed.
+     */
+    protected function resetCacheTokensAtBoundaries(): void
+    {
+        if (! $this->app->bound('events')) {
+            return;
+        }
+
+        $events = $this->app->make('events');
+
+        $boundaries = [
+            'Illuminate\Queue\Events\JobProcessing',
+            'Laravel\Octane\Events\RequestReceived',
+            'Laravel\Octane\Events\TaskReceived',
+            'Laravel\Octane\Events\TickReceived',
+        ];
+
+        foreach ($boundaries as $event) {
+            $events->listen($event, static fn () => QueryCacheHandler::resetLocalState());
+        }
     }
 }

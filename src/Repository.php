@@ -10,6 +10,13 @@ class Repository
 {
     protected array $indexableFields;
 
+    /**
+     * Whether writes re-read the record from Salesforce. When enabled the write and the
+     * read share one composite HTTP request; when disabled writes return the payload merged
+     * with the identifier, without server-computed values.
+     */
+    protected bool $refreshAfterWrite = true;
+
     public function __construct(
         protected string $object,
         protected array $defaultConstraints = [],
@@ -71,6 +78,18 @@ class Repository
     public function getIdentifier(): string
     {
         return $this->defaultIdentifier;
+    }
+
+    public function setRefreshAfterWrite(bool $refresh): static
+    {
+        $this->refreshAfterWrite = $refresh;
+
+        return $this;
+    }
+
+    public function refreshesAfterWrite(): bool
+    {
+        return $this->refreshAfterWrite;
     }
 
     public function setCacheHandler(QueryCacheHandler $handler): static
@@ -312,38 +331,83 @@ class Repository
         return $this->applyOptions($query, $options)->count();
     }
 
-    public function create(array $attributes): array
+    /**
+     * @param  array  $options  'refresh' (bool) overrides the repository default; 'select' and
+     *                          'includes' shape the re-read when refreshing.
+     */
+    public function create(array $attributes, array $options = []): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);
         $payload = $this->filterNullDefaults($payload, $attributes);
 
-        $result = $this->getClient()->create($this->object, $payload);
+        $client = $this->getClient();
 
-        if ($this->cacheHandler) {
-            $this->cacheHandler->flushQueryCache();
+        if (! $this->shouldRefresh($options)) {
+            $result = $client->create($this->object, $payload);
+
+            $this->invalidateAfterMutation([], null, $payload);
+
+            return $this->localRecord($payload, isset($result['id']) ? ['Id' => $result['id']] : []);
         }
 
-        $recordId = $result['id'] ?? null;
+        // The new Id is only known inside the composite request, so the re-read references it.
+        [$result, $record] = $this->writeWithRefresh(
+            $client->createSubrequest('write', $this->object, $payload),
+            ['Id' => Query::raw("'@{write.id}'")],
+            $options
+        );
 
-        if ($recordId === null) {
-            return array_merge($payload, $result ?? []);
+        $this->invalidateAfterMutation([], null, $payload);
+
+        if ($record === null) {
+            throw new RecordNotFoundException;
         }
 
-        return $this->findOrFail([$this->defaultIdentifier => $recordId], ['skip_retrieval' => true]);
+        if (isset($result['id'])) {
+            $this->seedEntryCache(['Id' => $result['id']], $record, $options);
+        }
+
+        return $record;
     }
 
-    public function update(string $id, array $attributes): array
+    /**
+     * @param  array  $options  'refresh' (bool) overrides the repository default; 'select' and
+     *                          'includes' shape the re-read when refreshing.
+     */
+    public function update(string $id, array $attributes, array $options = []): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);
         $payload = $this->filterNullDefaults($payload, $attributes);
 
-        $stale = $this->captureStaleForInvalidation([$this->defaultIdentifier => $id]);
+        $lookup = [$this->defaultIdentifier => $id];
 
-        $this->getClient()->update($this->object, $id, $payload, $this->defaultIdentifier);
+        $stale = $this->captureStaleForInvalidation($lookup);
 
-        $this->invalidateAfterMutation($id, $stale, $payload);
+        $client = $this->getClient();
 
-        return $this->findOrFail([$this->defaultIdentifier => $id], ['skip_retrieval' => true]);
+        if (! $this->shouldRefresh($options)) {
+            $client->update($this->object, $id, $payload, $this->defaultIdentifier);
+
+            $this->invalidateAfterMutation($lookup, $stale, $payload);
+
+            return $this->localRecord($payload, $lookup);
+        }
+
+        [, $record] = $this->writeWithRefresh(
+            $client->updateSubrequest('write', $this->object, $id, $payload, $this->defaultIdentifier),
+            $lookup,
+            $options
+        );
+
+        $this->invalidateAfterMutation($lookup, $stale, $payload);
+
+        if ($record === null) {
+            throw new RecordNotFoundException;
+        }
+
+        $this->seedEntryCache($lookup, $record, $options);
+
+        return $record;
     }
 
     /**
@@ -360,29 +424,41 @@ class Repository
      * @param  string|null  $identifier  Field to match on; defaults to the repository identifier
      *                                   (Id). Must be an External ID or Id field.
      */
-    public function upsertByIdentifier(string $identifierValue, array $attributes, ?string $identifier = null): array
+    public function upsertByIdentifier(string $identifierValue, array $attributes, ?string $identifier = null, array $options = []): array
     {
         $payload = array_replace_recursive($this->defaultValues, $attributes);
         $payload = $this->filterNullDefaults($payload, $attributes);
 
         $identifier ??= $this->defaultIdentifier;
+        $lookup = [$identifier => $identifierValue];
 
-        $stale = $this->captureStaleForInvalidation([$identifier => $identifierValue]);
+        $stale = $this->captureStaleForInvalidation($lookup);
 
-        $this->getClient()->upsert($this->object, $identifierValue, $payload, $identifier);
+        $client = $this->getClient();
 
-        if ($this->cacheHandler) {
-            $this->cacheHandler->flushQueryCache();
-            $this->cacheHandler->forgetEntryByConditions($this->object, [$identifier => $identifierValue]);
+        if (! $this->shouldRefresh($options)) {
+            $result = $client->upsert($this->object, $identifierValue, $payload, $identifier);
 
-            if (is_array($stale)) {
-                $this->forgetIndexableFields($stale, $payload);
-            } else {
-                $this->forgetPayloadIndexableFields($payload);
-            }
+            $this->invalidateAfterMutation($lookup, $stale, $payload);
+
+            return $this->localRecord($payload, array_merge($lookup, isset($result['id']) ? ['Id' => $result['id']] : []));
         }
 
-        return $this->findOrFail([$identifier => $identifierValue], ['skip_retrieval' => true]);
+        [, $record] = $this->writeWithRefresh(
+            $client->updateSubrequest('write', $this->object, $identifierValue, $payload, $identifier),
+            $lookup,
+            $options
+        );
+
+        $this->invalidateAfterMutation($lookup, $stale, $payload);
+
+        if ($record === null) {
+            throw new RecordNotFoundException;
+        }
+
+        $this->seedEntryCache($lookup, $record, $options);
+
+        return $record;
     }
 
     /**
@@ -400,15 +476,15 @@ class Repository
      * @param  array<string, mixed>  $conditions  Field => value pairs to match an existing record.
      * @param  array<string, mixed>  $attributes  Attributes to write on update or create.
      */
-    public function upsert(array $conditions, array $attributes): array
+    public function upsert(array $conditions, array $attributes, array $options = []): array
     {
-        $existing = $this->first($conditions, ['skip_retrieval' => true]);
+        $existing = $this->first($conditions, ['select' => [$this->defaultIdentifier], 'skip_retrieval' => true]);
 
         if ($existing) {
-            return $this->update($existing[$this->defaultIdentifier], $attributes);
+            return $this->update($existing[$this->defaultIdentifier], $attributes, $options);
         }
 
-        return $this->create(array_replace_recursive($attributes, $conditions));
+        return $this->create(array_replace_recursive($attributes, $conditions), $options);
     }
 
     public function delete(string $id): array
@@ -417,14 +493,7 @@ class Repository
 
         $result = $this->getClient()->delete($this->object, $id, $this->defaultIdentifier);
 
-        if ($this->cacheHandler) {
-            $this->cacheHandler->flushQueryCache();
-            $this->cacheHandler->forgetEntryByConditions($this->object, [$this->defaultIdentifier => $id]);
-
-            if (is_array($stale)) {
-                $this->forgetIndexableFields($stale);
-            }
-        }
+        $this->invalidateAfterMutation([$this->defaultIdentifier => $id], $stale);
 
         return $result;
     }
@@ -434,7 +503,7 @@ class Repository
         return $this->find($id, $options);
     }
 
-    public function firstOrCreate(array $attributes, array $extra = []): array
+    public function firstOrCreate(array $attributes, array $extra = [], array $options = []): array
     {
         $query = $this->newQuery();
 
@@ -442,19 +511,20 @@ class Repository
             $query->where($field, $value);
         }
 
-        $record = $this->applyOptions($query, [
-            'select' => ['FIELDS(ALL)'],
-            'skip_retrieval' => true,
-        ])->first();
+        $record = $this->applyOptions($query, array_merge(
+            ['select' => ['FIELDS(ALL)']],
+            array_intersect_key($options, array_flip(['select', 'includes', 'with'])),
+            ['skip_retrieval' => true]
+        ))->first();
 
         if ($record) {
             return $record;
         }
 
-        return $this->create(array_merge($attributes, $extra));
+        return $this->create(array_merge($attributes, $extra), $options);
     }
 
-    public function updateOrCreate(array $attributes, array $values = []): array
+    public function updateOrCreate(array $attributes, array $values = [], array $options = []): array
     {
         $query = $this->newQuery();
 
@@ -468,15 +538,15 @@ class Repository
         ])->first();
 
         if ($record) {
-            return $this->update($record[$this->defaultIdentifier], $values);
+            return $this->update($record[$this->defaultIdentifier], $values, $options);
         }
 
-        return $this->create(array_merge($attributes, $values));
+        return $this->create(array_merge($attributes, $values), $options);
     }
 
     protected function isOptionsArray(array $data): bool
     {
-        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset', 'skip_retrieval'];
+        $optionKeys = ['conditions', 'select', 'includes', 'with', 'order', 'sort', 'limit', 'offset', 'skip_retrieval', 'refresh'];
 
         return (bool) array_intersect(array_keys($data), $optionKeys);
     }
@@ -484,6 +554,77 @@ class Repository
     protected function getClient(): Salesforce
     {
         return $this->client ?? app(Salesforce::class);
+    }
+
+    protected function shouldRefresh(array $options): bool
+    {
+        if (array_key_exists('refresh', $options)) {
+            return (bool) $options['refresh'];
+        }
+
+        return $this->refreshAfterWrite;
+    }
+
+    /**
+     * Build the query used to re-read a record after a write: the repository defaults plus
+     * the lookup, selecting every field unless the options narrow it.
+     */
+    protected function refreshQuery(array $lookup, array $options): Query
+    {
+        $query = $this->newQuery();
+
+        foreach ($lookup as $field => $value) {
+            $query->where($field, $value);
+        }
+
+        $refreshOptions = array_intersect_key($options, array_flip(['select', 'includes', 'with']));
+        $refreshOptions['select'] = $refreshOptions['select'] ?? ['FIELDS(ALL)'];
+
+        return $this->applyOptions($query, $refreshOptions)->limit(1);
+    }
+
+    /**
+     * Run a write and re-read the record in a single composite HTTP request.
+     *
+     * @return array{0: array, 1: ?array}  the write response body and the re-read record
+     */
+    protected function writeWithRefresh(array $writeSubrequest, array $lookup, array $options): array
+    {
+        $client = $this->getClient();
+
+        $results = $client->composite([
+            $writeSubrequest,
+            $client->querySubrequest('refresh', $this->refreshQuery($lookup, $options)->toSoql()),
+        ]);
+
+        $write = is_array($results['write']['body'] ?? null) ? $results['write']['body'] : [];
+        $record = $results['refresh']['body']['records'][0] ?? null;
+
+        return [$write, is_array($record) ? $record : null];
+    }
+
+    /**
+     * Store a freshly read record in the entry cache under the same key a later find()/first()
+     * with the given lookup and options would use, so the write does not cause a cache miss.
+     */
+    protected function seedEntryCache(array $lookup, array $record, array $options): void
+    {
+        if (! $this->cacheHandler) {
+            return;
+        }
+
+        $query = $this->refreshQuery($lookup, $options);
+
+        $this->cacheHandler->rememberEntry($query, $query->toSoql(), static fn () => $record, ['skip_retrieval' => true]);
+    }
+
+    /**
+     * The record as known locally after a write without a refresh: the identity merged with
+     * the payload. Server-computed fields are absent.
+     */
+    protected function localRecord(array $payload, array $identity): array
+    {
+        return array_merge($identity, $payload);
     }
 
     protected function captureStaleForInvalidation(array $lookup): ?array
@@ -495,61 +636,45 @@ class Repository
         return $this->first($lookup);
     }
 
-    protected function invalidateAfterMutation(string $id, ?array $stale, array $payload): void
+    /**
+     * Invalidate cached queries for this object and every entry that could resolve to the
+     * mutated record: the lookup used for the write, plus the old (stale) and new (payload)
+     * values of every indexable field. Each value is one token rotation, so this is cheap.
+     *
+     * @param  array<string, mixed>  $lookup  field => value the write was keyed on, if any
+     */
+    protected function invalidateAfterMutation(array $lookup, ?array $stale = null, array $payload = []): void
     {
         if (! $this->cacheHandler) {
             return;
         }
 
-        $this->cacheHandler->flushQueryCache();
-        $this->cacheHandler->forgetEntryByConditions($this->object, [$this->defaultIdentifier => $id]);
+        $this->cacheHandler->flushQueryCacheForObject($this->object);
 
-        if (is_array($stale)) {
-            $this->forgetIndexableFields($stale, $payload);
-        } else {
-            $this->forgetPayloadIndexableFields($payload);
-        }
-    }
+        $conditions = [];
 
-    protected function forgetIndexableFields(array $record, array $payload = []): void
-    {
-        if (! $this->cacheHandler) {
-            return;
+        foreach ($lookup as $field => $value) {
+            if (is_string($field) && $value !== null && ! is_array($value)) {
+                $conditions[$field][] = $value;
+            }
         }
 
         foreach ($this->indexableFields as $field) {
-            if ($field === $this->defaultIdentifier) {
-                continue;
-            }
-
-            $oldValue = $record[$field] ?? null;
-            $newValue = $payload[$field] ?? null;
-
-            foreach (array_unique(array_filter([$oldValue, $newValue], static fn ($v) => $v !== null), SORT_REGULAR) as $value) {
-                $this->cacheHandler->forgetEntryByConditions($this->object, [$field => $value]);
+            foreach ([$stale[$field] ?? null, $payload[$field] ?? null] as $value) {
+                if ($value !== null && ! is_array($value)) {
+                    $conditions[$field][] = $value;
+                }
             }
         }
-    }
 
-    protected function forgetPayloadIndexableFields(array $payload): void
-    {
-        if (! $this->cacheHandler) {
+        if ($conditions === []) {
             return;
         }
 
-        foreach ($this->indexableFields as $field) {
-            if ($field === $this->defaultIdentifier) {
-                continue;
-            }
-
-            $value = $payload[$field] ?? null;
-
-            if ($value === null) {
-                continue;
-            }
-
-            $this->cacheHandler->forgetEntryByConditions($this->object, [$field => $value]);
-        }
+        $this->cacheHandler->forgetEntryByConditions(
+            $this->object,
+            array_map(static fn (array $values) => array_values(array_unique($values, SORT_REGULAR)), $conditions)
+        );
     }
 
     protected function hasNonDefaultIndexableFields(): bool

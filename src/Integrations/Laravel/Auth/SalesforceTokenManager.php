@@ -19,6 +19,7 @@ class SalesforceTokenManager implements TokenManager
         protected string $cacheKey = 'salesforce.access_token',
         protected string $lockKey = 'salesforce.access_token.lock',
         protected int $safetyMargin = 60,
+        protected int $defaultExpiresIn = 3300,
     ) {}
 
     public function getToken(): string
@@ -92,7 +93,9 @@ class SalesforceTokenManager implements TokenManager
             throw new \RuntimeException('Unable to retrieve Salesforce access token.');
         }
 
-        $expiresIn = isset($data['expires_in']) ? (int) $data['expires_in'] : 3300;
+        // The client credentials flow does not return expires_in (only issued_at), so in
+        // practice the configured default is used and a 401 triggers an early refresh.
+        $expiresIn = isset($data['expires_in']) ? (int) $data['expires_in'] : $this->defaultExpiresIn;
         $ttl = max(60, $expiresIn - $this->safetyMargin);
 
         $this->cache->put($this->cacheKey, $data['access_token'], $ttl);

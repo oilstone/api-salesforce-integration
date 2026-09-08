@@ -5,8 +5,8 @@ A lightweight integration for interacting with Salesforce from PHP. The package 
 ## Features
 
 - **Salesforce HTTP client** built on Guzzle with convenience helpers for common endpoints.
-- **Fluent SOQL query builder** supporting nested conditions, `IN` clauses, ordering, limits and relationship includes.
-- **Repository layer** exposing `find`, `first`, `get`, `create`, `update`, `upsert`, `upsertByIdentifier` and `delete` methods for Salesforce objects.
+- **Fluent SOQL query builder** supporting nested conditions, `IN` clauses, ordering, limits and relationship includes. `LIKE` values keep any `%` wildcard you supply and fall back to a contains match when none is given; `null`, booleans and `DateTimeInterface` values are written as proper SOQL literals, and `Query::raw()` wraps date functions such as `LAST_N_DAYS:7`.
+- **Repository layer** exposing `find`, `first`, `get`, `create`, `update`, `upsert`, `upsertByIdentifier` and `delete` methods for Salesforce objects. Writes re-read the record in the same HTTP round trip via the Composite API, or skip the re-read entirely with `setRefreshAfterWrite(false)`.
 - **Integration with garethhudson07/api** through repository and query bridge classes and a data transformer so that resources defined in that package can query Salesforce seamlessly.
 - **Laravel support** including a service provider for obtaining and caching OAuth tokens and optional request logging.
 - **Lookup utilities** for retrieving and caching pick list values.
@@ -38,11 +38,13 @@ php artisan vendor:publish --tag=config --provider="Oilstone\\ApiSalesforceInteg
 Configure your Salesforce instance in `config/salesforce.php` and the provider will handle authentication and caching of access tokens. When the `debug` option is enabled each request and response is logged via Laravel's logger. Queries served from the cache are also logged with a `cache` flag so they can be distinguished from live requests.
 
 OAuth access tokens are managed by `SalesforceTokenManager`, which caches the
-token under the key `salesforce.access_token`, derives its TTL from the
-`expires_in` field returned by Salesforce (with a 60 second safety margin),
-serialises concurrent token fetches with a cache lock to avoid thundering-herd
-requests, and transparently refreshes the token if any Salesforce call returns
-HTTP 401. This works out of the box with the Redis cache store.
+token under the key `salesforce.access_token`, serialises concurrent token
+fetches with a cache lock to avoid thundering-herd requests, and transparently
+refreshes the token if any Salesforce call returns HTTP 401. Salesforce's client
+credentials flow does not return an `expires_in` value, so the cache TTL falls
+back to a configurable default (55 minutes, minus a 60 second safety margin);
+pass a different `defaultExpiresIn` to the manager if your org's session timeout
+is shorter. This works out of the box with the Redis cache store.
 
 When authenticating with the client credentials grant you must supply at least one OAuth scope. Set the `SALESFORCE_SCOPES` environment variable to a comma separated list (or define the `scopes` array in the published configuration) and the service provider will include them in the token request.
 
@@ -50,19 +52,29 @@ The package divides caching into three independent layers via
 `QueryCacheHandler`:
 
 * **Query cache** entries persist the results of SOQL queries for a short TTL.
-  The SOQL string itself is hashed to generate the cache key and a single
-  `flushQueryCache` method invalidates every cached query in one call by
-  rotating an internal namespace token. The query cache is also flushed
-  automatically by any repository mutation (`create`, `update`, `upsert`,
-  `upsertByIdentifier`, `delete`).
+  The cache key combines the SOQL string with a global namespace token and one
+  token per Salesforce object the query reads (the root object plus any child
+  objects pulled in through `with` includes). Repository mutations (`create`,
+  `update`, `upsert`, `upsertByIdentifier`, `delete`) rotate only the mutated
+  object's token, so writing a Contact leaves cached Account queries intact
+  unless they include Contacts. `flushQueryCacheForObject` does the same by
+  hand and `flushQueryCache` rotates the global token to invalidate everything.
+  Queries that filter or sort on cross-object fields (relationship paths,
+  formula or roll-up fields) are not invalidated by writes to the other object
+  and rely on the TTL.
 * **Entry cache** entries store individual records returned from `find` /
-  `first` lookups for a longer TTL. Each cached entry is indexed under every
-  configured "indexable field" (the record's `Id` by default, plus any extra
-  unique columns you register via `setIndexableFields`). Mutations invalidate
-  the entry under each known indexable field so a record cached by `Email`
-  remains in sync after an update keyed by `Id`. Negative results (`null` for
-  "not found") are deliberately not cached, so a subsequent `create` is never
-  fooled by a stale miss.
+  `first` lookups for a longer TTL. A lookup is stored as a small pointer keyed
+  by its conditions, selected fields and includes, which references the record
+  keyed by identifier value. Both keys embed version tokens for the "indexable
+  fields" involved (the record's `Id` by default, plus any extra unique columns
+  you register via `setIndexableFields`). Mutations rotate the tokens for the
+  old and new values of every indexable field, which orphans every pointer and
+  record that embedded them, so a record cached by `Email` remains in sync
+  after an update keyed by `Id`. Invalidation is a single write with no
+  read-modify-write step, so concurrent lookups cannot lose track of an entry.
+  A lookup that selected only `Id` is never served to a caller expecting the
+  full record. Negative results (`null` for "not found") are deliberately not
+  cached, so a subsequent `create` is never fooled by a stale miss.
 * **Schema cache** entries store object describe payloads and picklist value
   responses, which rarely change. Schema entries live in their own namespace
   and are **not** affected by `flushQueryCache`, so the (expensive) describe
@@ -84,15 +96,21 @@ $repository = (new Repository('Contact'))
 ```
 
 Only register fields that uniquely identify a record. Non-unique fields (e.g.
-`Status`) are not appropriate as indexable fields. Note that if the value of
-an indexable field changes during an update, the cache entry keyed under the
-old value is left to expire via TTL — this is rarely a problem when
-indexable fields are immutable identifiers.
+`Status`) are not appropriate as indexable fields. When a repository has
+indexable fields beyond its identifier, mutations first read the current record
+(from the entry cache when possible) so entries keyed under the old value of a
+changed field are invalidated as well as the new one.
+
+Invalidation tokens are memoised per process so each request reads them at
+most once. The Laravel service provider resets that memo at queue job and
+Octane request boundaries; in other long-running processes call
+`QueryCacheHandler::resetLocalState()` at your own boundaries.
 
 ### Clearing caches manually
 
 ```bash
-php artisan salesforce:cache:clear                                          # Flushes all query cache entries
+php artisan salesforce:cache:clear                                          # Flushes query cache entries for every object
+php artisan salesforce:cache:clear Account                                  # Flushes query cache entries that read Account
 php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX               # Also forgets the entry cache for that Id
 php artisan salesforce:cache:clear Account 001XXXXXXXXXXXXXXX --field=External_Id__c
 php artisan salesforce:cache:clear --schema                                 # Flushes only the schema cache
@@ -188,6 +206,33 @@ $facilityRepo = $accountRepo->freshRepository('Museum_Facility__c');
 ```
 
 The returned repository is clean and can be configured independently.
+
+## Writes and the follow-up read
+
+`create`, `update`, `upsert` and `upsertByIdentifier` return the record as
+Salesforce now holds it, including server-computed fields. Rather than issuing a
+second HTTP request for that read, the write and the read are sent together as
+one [Composite API](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_composite.htm)
+request, which counts as a single API call against your limits. The re-read uses
+the repository's default constraints and includes and selects `FIELDS(ALL)`
+unless you narrow it:
+
+```php
+$repository->update($id, ['Name' => 'Acme'], ['select' => ['Id', 'Name', 'LastModifiedDate']]);
+```
+
+When you do not need the stored record back, skip the read altogether. The
+methods then return the payload merged with the identifier:
+
+```php
+$repository->create($attributes, ['refresh' => false]);
+
+// or for every write on this repository
+$repository->setRefreshAfterWrite(false);
+```
+
+Repositories created through the `garethhudson07/api` adapter select the
+schema's fields on the re-read automatically.
 
 ## Apex REST requests
 

@@ -144,7 +144,7 @@ class Repository implements RepositoryInterface
 
         $fields = $this->reverseAttributes($request->getParsedBody()?->toArray() ?? [], true);
 
-        $record = $repository->create($fields);
+        $record = $repository->create($fields, $this->writeOptions());
 
         return ApiResultRecord::make($record);
     }
@@ -158,7 +158,7 @@ class Repository implements RepositoryInterface
 
         $fields = $this->reverseAttributes($request->getParsedBody()?->toArray() ?? [], true);
 
-        $record = $repository->update($id, $fields);
+        $record = $repository->update($id, $fields, $this->writeOptions());
 
         return ApiResultRecord::make($record);
     }
@@ -178,11 +178,11 @@ class Repository implements RepositoryInterface
      * Create a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
-    public function createRecord(array $attributes, ?string $object = null): Record
+    public function createRecord(array $attributes, ?string $object = null, array $options = []): Record
     {
         $fields = $this->reverseAttributes($attributes, true);
 
-        $record = $this->repository($object)->create($fields);
+        $record = $this->repository($object)->create($fields, $this->writeOptions($options));
 
         return $this->transformRecord($record);
     }
@@ -190,11 +190,11 @@ class Repository implements RepositoryInterface
     /**
      * Force create a record bypassing readonly and fixed field protections.
      */
-    public function forceCreateRecord(array $attributes, ?string $object = null): Record
+    public function forceCreateRecord(array $attributes, ?string $object = null, array $options = []): Record
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
-        $record = $this->repository($object)->create($fields);
+        $record = $this->repository($object)->create($fields, $this->writeOptions($options));
 
         return $this->transformRecord($record);
     }
@@ -203,11 +203,11 @@ class Repository implements RepositoryInterface
      * Update a record using the underlying repository after transforming the
      * provided attributes using the configured transformer.
      */
-    public function updateRecord(string $id, array $attributes, ?string $object = null): Record
+    public function updateRecord(string $id, array $attributes, ?string $object = null, array $options = []): Record
     {
         $fields = $this->reverseAttributes($attributes, true);
 
-        $record = $this->repository($object)->update($id, $fields);
+        $record = $this->repository($object)->update($id, $fields, $this->writeOptions($options));
 
         return $this->transformRecord($record);
     }
@@ -215,11 +215,11 @@ class Repository implements RepositoryInterface
     /**
      * Force update a record bypassing readonly and fixed field protections.
      */
-    public function forceUpdateRecord(string $id, array $attributes, ?string $object = null): Record
+    public function forceUpdateRecord(string $id, array $attributes, ?string $object = null, array $options = []): Record
     {
         $fields = $this->reverseAttributes($attributes, true, true);
 
-        $record = $this->repository($object)->update($id, $fields);
+        $record = $this->repository($object)->update($id, $fields, $this->writeOptions($options));
 
         return $this->transformRecord($record);
     }
@@ -240,12 +240,12 @@ class Repository implements RepositoryInterface
      * Proxy the firstOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function firstOrCreateRecord(array $attributes, array $extra = [], ?string $object = null): Record
+    public function firstOrCreateRecord(array $attributes, array $extra = [], ?string $object = null, array $options = []): Record
     {
         $attrs = $this->reverseConditions($attributes);
         $extraFields = $this->reverseAttributes($extra, true);
 
-        $record = $this->repository($object)->firstOrCreate($attrs, $extraFields);
+        $record = $this->repository($object)->firstOrCreate($attrs, $extraFields, $this->writeOptions($options));
 
         return $this->transformRecord($record);
     }
@@ -254,12 +254,12 @@ class Repository implements RepositoryInterface
      * Proxy the updateOrCreate method on the underlying repository with schema
      * transformation of the provided values.
      */
-    public function updateOrCreateRecord(array $attributes, array $values = [], ?string $object = null): Record
+    public function updateOrCreateRecord(array $attributes, array $values = [], ?string $object = null, array $options = []): Record
     {
         $attrs = $this->reverseConditions($attributes);
         $valueFields = $this->reverseAttributes($values, true);
 
-        $record = $this->repository($object)->updateOrCreate($attrs, $valueFields);
+        $record = $this->repository($object)->updateOrCreate($attrs, $valueFields, $this->writeOptions($options));
 
         return $this->transformRecord($record);
     }
@@ -271,12 +271,12 @@ class Repository implements RepositoryInterface
      * Inherits upsert()'s non-atomic query-then-write behaviour; for a single
      * External ID (or Id) match use upsertRecordByIdentifier() instead.
      */
-    public function upsertRecord(array $conditions, array $values = [], ?string $object = null): Record
+    public function upsertRecord(array $conditions, array $values = [], ?string $object = null, array $options = []): Record
     {
         $matchConditions = $this->reverseConditions($conditions);
         $valueFields = $this->reverseAttributes($values, true);
 
-        $record = $this->repository($object)->upsert($matchConditions, $valueFields);
+        $record = $this->repository($object)->upsert($matchConditions, $valueFields, $this->writeOptions($options));
 
         return $this->transformRecord($record);
     }
@@ -286,11 +286,11 @@ class Repository implements RepositoryInterface
      * transformation of the provided values, performing Salesforce's native atomic
      * upsert against a single identifier field.
      */
-    public function upsertRecordByIdentifier(string $identifierValue, array $values = [], ?string $identifier = null, ?string $object = null): Record
+    public function upsertRecordByIdentifier(string $identifierValue, array $values = [], ?string $identifier = null, ?string $object = null, array $options = []): Record
     {
         $valueFields = $this->reverseAttributes($values, true);
 
-        $record = $this->repository($object)->upsertByIdentifier($identifierValue, $valueFields, $identifier);
+        $record = $this->repository($object)->upsertByIdentifier($identifierValue, $valueFields, $identifier, $this->writeOptions($options));
 
         return $this->transformRecord($record);
     }
@@ -382,6 +382,17 @@ class Repository implements RepositoryInterface
         $record = $this->repository($object)->firstOrFail($conditions, $options);
 
         return $this->transformRecord($record);
+    }
+
+    /**
+     * Options for a write: re-read only the schema's fields rather than FIELDS(ALL), unless
+     * the caller chose otherwise.
+     */
+    protected function writeOptions(array $options = []): array
+    {
+        $options['select'] = $options['select'] ?? $this->getDefaultFields();
+
+        return $options;
     }
 
     public function repository(?string $object = null): BaseRepository
