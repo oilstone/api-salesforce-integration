@@ -305,7 +305,13 @@ $repository = (new Repository('Account'))
 
 $repository->find($id);                                   // SELECT Id, Name, Industry ...
 $repository->find($id, ['select' => ['Id', 'Website']]);  // an explicit select still wins
+$repository->find($id, ['select' => 'Id,Website']);       // a comma-separated string works too
 ```
+
+A select given as a string is split on commas and trimmed, so the same value
+you would put in a SOQL `SELECT` clause (including relationship fields such as
+`Account.Name`) can be passed straight through. An empty select falls back to
+the repository default.
 
 Repositories created through the `garethhudson07/api` adapter set this to the
 schema's field list automatically, so API-driven reads and write re-reads never

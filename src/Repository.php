@@ -27,7 +27,7 @@ class Repository
         protected ?QueryCacheHandler $cacheHandler = null,
         protected ?Salesforce $client = null,
         array $indexableFields = [],
-        ?array $defaultSelect = null,
+        array|string|null $defaultSelect = null,
     ) {
         $this->indexableFields = $indexableFields !== []
             ? array_values(array_unique($indexableFields))
@@ -46,13 +46,10 @@ class Repository
      */
     protected ?array $defaultSelect = null;
 
-    public function setDefaultSelect(?array $fields): static
+    public function setDefaultSelect(array|string|null $fields): static
     {
         if ($fields !== null) {
-            $fields = array_values(array_unique(array_filter(
-                array_map(static fn ($field) => is_string($field) ? trim($field) : '', $fields)
-            )));
-
+            $fields = $this->normaliseSelect($fields);
             $fields = $fields === [] ? null : $fields;
         }
 
@@ -72,7 +69,31 @@ class Repository
      */
     protected function singleRecordSelect(array $options): array
     {
-        return $options['select'] ?? $this->defaultSelect ?? ['FIELDS(ALL)'];
+        if (isset($options['select'])) {
+            $select = $this->normaliseSelect($options['select']);
+
+            if ($select !== []) {
+                return $select;
+            }
+        }
+
+        return $this->defaultSelect ?? ['FIELDS(ALL)'];
+    }
+
+    /**
+     * Accept a select as either a list of fields or a comma-separated string (as used in
+     * Salesforce query strings) and return a trimmed, de-duplicated list of fields.
+     *
+     * @return array<int, string>
+     */
+    protected function normaliseSelect(array|string $fields): array
+    {
+        $fields = is_array($fields) ? $fields : explode(',', $fields);
+
+        return array_values(array_unique(array_filter(
+            array_map(static fn ($field) => is_scalar($field) ? trim((string) $field) : '', $fields),
+            static fn (string $field) => $field !== ''
+        )));
     }
 
     public function setDefaultConstraints(array $constraints): static
