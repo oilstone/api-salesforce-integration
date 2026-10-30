@@ -10,6 +10,9 @@ use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
 use Oilstone\ApiSalesforceIntegration\Clients\Salesforce;
 use Oilstone\ApiSalesforceIntegration\Integrations\Laravel\Auth\SalesforceTokenManager;
 use Oilstone\ApiSalesforceIntegration\Integrations\Laravel\Console\ClearCache;
+use Oilstone\ApiSalesforceIntegration\Integrations\SystemStatus\SalesforceHeartbeatMonitor;
+use Oilstone\ApiSalesforceIntegration\Integrations\SystemStatus\SalesforceMonitor;
+use Oilstone\SystemStatus\SystemStatus;
 
 class ServiceProvider extends BaseServiceProvider
 {
@@ -57,6 +60,25 @@ class ServiceProvider extends BaseServiceProvider
                 $logger,
                 $queryCacheHandler,
             );
+        });
+
+        $this->registerSystemStatusMonitors();
+    }
+
+    /**
+     * Make the monitors available as system-status types when that package is installed. Watches
+     * share the status's monitor factory, so they can use the types too.
+     */
+    protected function registerSystemStatusMonitors(): void
+    {
+        if (! class_exists(SystemStatus::class)) {
+            return;
+        }
+
+        $this->callAfterResolving(SystemStatus::class, static function (SystemStatus $status): void {
+            $status
+                ->extend('salesforce', SalesforceMonitor::class)
+                ->extend('salesforce_heartbeat', SalesforceHeartbeatMonitor::class);
         });
     }
 

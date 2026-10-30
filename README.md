@@ -478,6 +478,88 @@ class IndustryLookup extends CachedLookup
 $industries = IndustryLookup::all();
 ```
 
+## Health check monitors
+
+With [oilstone/system-status](https://github.com/oilstone/system-status) installed,
+the package provides two monitors that check Salesforce with the client's own
+instance URL, API version and access token:
+
+```bash
+composer require oilstone/system-status
+```
+
+| Type | Class | Request | Options |
+| --- | --- | --- | --- |
+| `salesforce` | `SalesforceMonitor` | `GET /services/data/{version}/query` | `query` (default `SELECT Name, IsSandbox, InstanceName FROM Organization LIMIT 1`), `degrade_usage` (default `80`), `max_usage` (default `95`) |
+| `salesforce_heartbeat` | `SalesforceHeartbeatMonitor` | `GET /services/data/{version}/` | none beyond the common ones; `timeout` defaults to `3` and `connect_timeout` to `2` |
+
+Both classes live in `Oilstone\ApiSalesforceIntegration\Integrations\SystemStatus`
+and accept system-status's common options: `name`, `thresholds`, `otherwise`,
+`timeout` (default 5s), `connect_timeout` (default 3s) and `options` (Guzzle
+client defaults). The default thresholds are 1000ms optimal and 3000ms acceptable
+for `salesforce`, and 500ms and 1500ms for `salesforce_heartbeat`.
+
+`salesforce` runs its query and records the organisation name, whether it is a
+sandbox and the instance name as metadata. It also reads the daily API usage
+from the `Sforce-Limit-Info` response header, records it as `api_usage`, and
+degrades the check at `degrade_usage` percent and fails it at `max_usage`
+percent ("Daily API usage is at 83% (83000 of 100000)"). Set either to `null`
+to turn that limit off. `salesforce_heartbeat` makes the fastest authenticated
+request Salesforce answers, the resource list for the API version, which runs
+no SOQL and records nothing, so it suits frequent checks and watches.
+
+If Salesforce rejects the access token with a 401, both monitors refresh it once
+through the token manager and retry. **Each check counts as one request against
+the org's daily API limit**, so take that into account when choosing how often
+to run them.
+
+### In Laravel
+
+The service provider registers both types when system-status is installed, and
+the container injects the `Salesforce` client. Use them in
+`config/system-status.php`:
+
+```php
+'monitors' => [
+    'services' => [
+        ['type' => 'salesforce', 'degrade_usage' => 70],
+    ],
+],
+
+'watches' => [
+    'definitions' => [
+        'salesforce' => [
+            'monitor' => 'salesforce_heartbeat',
+            'failures' => 3,
+            'handler' => App\Watches\SalesforceOutage::class,
+        ],
+    ],
+],
+```
+
+Extend either class to add checks of your own. A subclass can call
+`authenticatedRequest()` for further requests with the same token handling, and
+`apiUrl()`, `instanceUrl()`, `apiVersion()` and `token()` for the client's
+settings. Register a subclass by its `class` in the definition, or under a type
+of its own with `SystemStatus::extend()`.
+
+### Without Laravel
+
+The core monitor factory constructs classes with the options alone, so it cannot
+inject the client. Register the types, or add the monitors, with closures
+instead:
+
+```php
+use Oilstone\ApiSalesforceIntegration\Integrations\SystemStatus\SalesforceHeartbeatMonitor;
+use Oilstone\ApiSalesforceIntegration\Integrations\SystemStatus\SalesforceMonitor;
+use Oilstone\SystemStatus\SystemStatus;
+
+$status = (new SystemStatus())
+    ->extend('salesforce', fn (array $config) => new SalesforceMonitor($config, $salesforce))
+    ->extend('salesforce_heartbeat', fn (array $config) => new SalesforceHeartbeatMonitor($config, $salesforce))
+    ->add(['type' => 'salesforce'], 'services');
+```
+
 ## Exceptions
 
 `SalesforceException` is thrown for non‑successful responses and provides access to the underlying error details via `getErrors()`.
