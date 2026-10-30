@@ -55,6 +55,21 @@ class Salesforce
         $this->cacheHandler = $cacheHandler;
     }
 
+    public function getInstanceUrl(): string
+    {
+        return $this->instanceUrl;
+    }
+
+    public function getInstanceVersion(): string
+    {
+        return $this->instanceVersion;
+    }
+
+    public function getTokenManager(): TokenManager
+    {
+        return $this->tokenManager;
+    }
+
     protected function log(string $method, string $url, array $context, array $response, int $status): void
     {
         if (! $this->logger) {

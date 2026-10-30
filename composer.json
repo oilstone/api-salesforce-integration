@@ -13,7 +13,11 @@
     "require-dev": {
         "laravel/framework": "^13.17",
         "oilstone/api-resource-loader": "^5.3",
+        "oilstone/system-status": "^2.0.0-beta.3",
         "psr/http-message": "^1.0"
+    },
+    "suggest": {
+        "oilstone/system-status": "Enables the Salesforce health check monitors"
     },
     "license": "MIT",
     "autoload": {
