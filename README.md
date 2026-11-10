@@ -95,6 +95,11 @@ $repository = (new Repository('Contact'))
     ->setIndexableFields(['Id', 'Email', 'External_Id__c']);
 ```
 
+Resources loaded through `ApiResourceLoader\Resource` with an identifier other
+than `Id` register both their identifier and `Id` as indexable fields
+automatically, since their records are always selected with `Id` and may be
+looked up by it.
+
 Only register fields that uniquely identify a record. Non-unique fields (e.g.
 `Status`) are not appropriate as indexable fields. When a repository has
 indexable fields beyond its identifier, mutations need the record's current

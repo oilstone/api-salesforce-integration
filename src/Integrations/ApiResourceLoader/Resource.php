@@ -96,6 +96,12 @@ class Resource extends BaseResource
             ->setDefaultIncludes(array_merge($this->includes(), $this->includes))
             ->setIdentifier($this->identifier);
 
+        // Records are always selected with their Id, so a resource keyed by another identifier can still be
+        // looked up by Id. Registering it as indexable lets invalidation by Id reach those cached lookups.
+        if ($this->identifier !== 'Id' && method_exists($repository, 'setIndexableFields') && method_exists($repository, 'getIndexableFields')) {
+            $repository->setIndexableFields(array_merge([$this->identifier, 'Id'], $repository->getIndexableFields()));
+        }
+
         $cacheHandler = $this->cacheEnabled ? $this->getCacheHandler() : null;
 
         if (method_exists($repository, 'setCacheHandler') && $cacheHandler) {
