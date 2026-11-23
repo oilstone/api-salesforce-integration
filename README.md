@@ -296,6 +296,40 @@ an entry cached under an indexable field's previous value survives until its
 TTL. Prefer the single-record methods when you need the stored record back or
 when indexable fields other than the identifier change on existing records.
 
+### Combining writes in one Composite request
+
+To make several writes atomic, or to save their round trips, build them as
+subrequests on the client and send them together with `composite()`. With
+`allOrNone` (the default) every subrequest is rolled back if any of them fails,
+including the records inside sObject Collections subrequests: the Composite
+flag overrides theirs. Subrequests run in the order given, so a later one can
+rely on an earlier one's changes.
+
+```php
+$results = $salesforce->composite([
+    $salesforce->updateSubrequest('order', 'Order', $orderId, ['Status' => 'Draft']),
+    $salesforce->deleteManySubrequest('oldItems', $staleItemIds),
+    $salesforce->createManySubrequest('newItems', array_map(
+        fn (array $line) => ['attributes' => ['type' => 'OrderItem']] + $line,
+        $lines
+    )),
+]);
+
+$saveResults = $results['newItems']['body'];
+```
+
+`createManySubrequest` and `deleteManySubrequest` take up to 200 records or ids
+each (`Salesforce::COLLECTION_LIMIT`). A Composite request takes at most 25
+subrequests (`COMPOSITE_SUBREQUEST_LIMIT`), of which at most five may be
+sObject Collections or queries (`COMPOSITE_COLLECTION_LIMIT`).
+
+Salesforce reports failed records in a collection with an HTTP 200, so
+`composite()` checks each collection's results and raises
+`SalesforceCollectionException` for one with a failed record, as the batch
+methods do. These subrequests bypass the repositories, so no cache is
+invalidated: flush the affected objects yourself when their repositories are
+cached.
+
 ## Selecting fields on single-record reads
 
 `find`, `first`, `firstOrCreate` and the re-read after a write select
@@ -567,7 +601,7 @@ $status = (new SystemStatus())
 
 ## Exceptions
 
-`SalesforceException` is thrown for non‑successful responses and provides access to the underlying error details via `getErrors()`.
+`SalesforceException` is thrown for non‑successful responses and provides access to the underlying error details via `getErrors()`. `SalesforceCollectionException` extends it for sObject Collections requests, and Composite requests containing them, in which one or more records failed; it also carries the raw results and the indexes of the failed records.
 
 ## License
 

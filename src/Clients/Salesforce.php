@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use Oilstone\ApiSalesforceIntegration\Auth\StaticTokenManager;
 use Oilstone\ApiSalesforceIntegration\Auth\TokenManager;
 use Oilstone\ApiSalesforceIntegration\Cache\QueryCacheHandler;
+use Oilstone\ApiSalesforceIntegration\Exceptions\SalesforceCollectionException;
 use Oilstone\ApiSalesforceIntegration\Exceptions\SalesforceException;
 use Psr\Log\LoggerInterface;
 
@@ -15,6 +16,16 @@ class Salesforce
      * Maximum records per sObject Collections request.
      */
     public const COLLECTION_LIMIT = 200;
+
+    /**
+     * Maximum subrequests per Composite request.
+     */
+    public const COMPOSITE_SUBREQUEST_LIMIT = 25;
+
+    /**
+     * Maximum sObject Collections and query subrequests per Composite request.
+     */
+    public const COMPOSITE_COLLECTION_LIMIT = 5;
 
     protected Client $httpClient;
 
@@ -339,7 +350,10 @@ class Salesforce
      *
      * With $allOrNone the whole batch is rolled back when any subrequest fails; the failing
      * subrequest's errors are raised as a SalesforceException (subrequests reported as
-     * PROCESSING_HALTED are skipped in favour of the real cause).
+     * PROCESSING_HALTED are skipped in favour of the real cause). An sObject Collections
+     * subrequest reports failed records with an HTTP 200, so one with any failed record is
+     * raised as a SalesforceCollectionException. A Composite allOrNone overrides the
+     * allOrNone of the collections inside it, so with it set nothing has been committed.
      *
      * @param  array<int, array{method: string, url: string, referenceId: string, body?: array}>  $subrequests
      * @return array<string, array{status: int, body: mixed}>  keyed by referenceId
@@ -364,24 +378,48 @@ class Salesforce
 
             $results[$reference] = ['status' => $status, 'body' => $body];
 
-            if ($status < 400) {
-                continue;
-            }
+            $exception = $this->subrequestFailure($reference, $status, $body);
 
-            $errors = is_array($body) && $body !== []
-                ? (array_is_list($body) ? $body : [$body])
-                : [['message' => sprintf('Composite subrequest "%s" failed', $reference), 'errorCode' => 'HTTP_'.$status]];
-
-            if ($failure === null || ($failure[0][0]['errorCode'] ?? '') === 'PROCESSING_HALTED') {
-                $failure = [$errors, $status];
+            if ($exception !== null && ($failure === null || ($failure->getErrors()[0]['errorCode'] ?? '') === 'PROCESSING_HALTED')) {
+                $failure = $exception;
             }
         }
 
         if ($failure !== null) {
-            throw new SalesforceException($failure[0], $failure[1]);
+            throw $failure;
         }
 
         return $results;
+    }
+
+    /**
+     * The exception for a failed Composite subrequest, or null when it succeeded.
+     */
+    protected function subrequestFailure(string $reference, int $status, mixed $body): ?SalesforceException
+    {
+        if ($status >= 400) {
+            $errors = is_array($body) && $body !== []
+                ? (array_is_list($body) ? $body : [$body])
+                : [['message' => sprintf('Composite subrequest "%s" failed', $reference), 'errorCode' => 'HTTP_'.$status]];
+
+            return new SalesforceException($errors, $status);
+        }
+
+        $isCollectionResult = is_array($body)
+            && $body !== []
+            && array_is_list($body)
+            && is_array($body[0])
+            && array_key_exists('success', $body[0]);
+
+        if ($isCollectionResult) {
+            foreach ($body as $result) {
+                if (($result['success'] ?? false) !== true) {
+                    return SalesforceCollectionException::fromResults($body);
+                }
+            }
+        }
+
+        return null;
     }
 
     public function createSubrequest(string $referenceId, string $object, array $payload): array
@@ -409,6 +447,48 @@ class Salesforce
         return [
             'method' => 'DELETE',
             'url' => $this->sobjectRowPath($object, $id, $identifier),
+            'referenceId' => $referenceId,
+        ];
+    }
+
+    /**
+     * Create up to 200 records via sObject Collections as a Composite subrequest. Each record
+     * carries its own attributes.type, as for createMany(). Its SaveResult list is the
+     * subrequest's body.
+     *
+     * @param  array<int, array>  $records
+     */
+    public function createManySubrequest(string $referenceId, array $records, bool $allOrNone = true): array
+    {
+        $this->assertCollectionSize($records, 'records');
+
+        return [
+            'method' => 'POST',
+            'url' => $this->apiPath('composite/sobjects'),
+            'referenceId' => $referenceId,
+            'body' => [
+                'allOrNone' => $allOrNone,
+                'records' => array_values($records),
+            ],
+        ];
+    }
+
+    /**
+     * Delete up to 200 records by Id via sObject Collections as a Composite subrequest. Its
+     * DeleteResult list is the subrequest's body.
+     *
+     * @param  array<int, string>  $ids
+     */
+    public function deleteManySubrequest(string $referenceId, array $ids, bool $allOrNone = true): array
+    {
+        $this->assertCollectionSize($ids, 'ids');
+
+        return [
+            'method' => 'DELETE',
+            'url' => $this->apiPath('composite/sobjects').'?'.http_build_query([
+                'ids' => implode(',', array_values($ids)),
+                'allOrNone' => $allOrNone ? 'true' : 'false',
+            ]),
             'referenceId' => $referenceId,
         ];
     }
