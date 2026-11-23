@@ -285,7 +285,24 @@ class Salesforce
         $object = trim($object, '/');
         $identifier = trim($identifier, '/');
 
-        $records = array_map(static function (array $record) use ($object, $identifier): array {
+        return $this->request('PATCH', $this->instanceUrl.$this->apiPath('composite/sobjects/'.$object.'/'.$identifier), [
+            'json' => [
+                'allOrNone' => $allOrNone,
+                'records' => $this->prepareUpsertRecords($object, $identifier, $records),
+            ],
+            'log_request' => true,
+        ]);
+    }
+
+    /**
+     * Type each record for an upsert and drop its Id unless Id is the identifier.
+     *
+     * @param  array<int, array>  $records
+     * @return array<int, array>
+     */
+    protected function prepareUpsertRecords(string $object, string $identifier, array $records): array
+    {
+        return array_map(static function (array $record) use ($object, $identifier): array {
             if ($identifier !== 'Id') {
                 unset($record['Id']);
             }
@@ -297,14 +314,6 @@ class Salesforce
 
             return $record;
         }, array_values($records));
-
-        return $this->request('PATCH', $this->instanceUrl.$this->apiPath('composite/sobjects/'.$object.'/'.$identifier), [
-            'json' => [
-                'allOrNone' => $allOrNone,
-                'records' => $records,
-            ],
-            'log_request' => true,
-        ]);
     }
 
     /**
@@ -469,6 +478,32 @@ class Salesforce
             'body' => [
                 'allOrNone' => $allOrNone,
                 'records' => array_values($records),
+            ],
+        ];
+    }
+
+    /**
+     * Upsert up to 200 records of one type by an external id field via sObject Collections as a
+     * Composite subrequest. Records are prepared as for upsertMany(). Its UpsertResult list is
+     * the subrequest's body. A later subrequest can link to one of these records through the
+     * external id, e.g. "Account": {"External_Id__c": "..."}, without needing its new Id.
+     *
+     * @param  array<int, array>  $records
+     */
+    public function upsertManySubrequest(string $referenceId, string $object, string $identifier, array $records, bool $allOrNone = true): array
+    {
+        $this->assertCollectionSize($records, 'records');
+
+        $object = trim($object, '/');
+        $identifier = trim($identifier, '/');
+
+        return [
+            'method' => 'PATCH',
+            'url' => $this->apiPath('composite/sobjects/'.$object.'/'.$identifier),
+            'referenceId' => $referenceId,
+            'body' => [
+                'allOrNone' => $allOrNone,
+                'records' => $this->prepareUpsertRecords($object, $identifier, $records),
             ],
         ];
     }

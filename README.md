@@ -318,8 +318,26 @@ $results = $salesforce->composite([
 $saveResults = $results['newItems']['body'];
 ```
 
-`createManySubrequest` and `deleteManySubrequest` take up to 200 records or ids
-each (`Salesforce::COLLECTION_LIMIT`). A Composite request takes at most 25
+`upsertManySubrequest` upserts records by an external id field. A later
+subrequest can link to one of those records through its external id rather
+than its new Id, which avoids referencing into the collection's result:
+
+```php
+$salesforce->composite([
+    $salesforce->upsertManySubrequest('accounts', 'Account', 'External_Id__c', [
+        ['External_Id__c' => 'GIFT-1', 'FirstName' => 'Ada', 'LastName' => 'Lovelace'],
+    ]),
+    $salesforce->createManySubrequest('items', [[
+        'attributes' => ['type' => 'OrderItem'],
+        'OrderId' => $orderId,
+        'Member__r' => ['External_Id__c' => 'GIFT-1'],
+        // ...
+    ]]),
+]);
+```
+
+`createManySubrequest`, `upsertManySubrequest` and `deleteManySubrequest` take
+up to 200 records or ids each (`Salesforce::COLLECTION_LIMIT`). A Composite request takes at most 25
 subrequests (`COMPOSITE_SUBREQUEST_LIMIT`), of which at most five may be
 sObject Collections or queries (`COMPOSITE_COLLECTION_LIMIT`).
 
