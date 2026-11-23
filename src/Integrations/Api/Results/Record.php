@@ -31,6 +31,8 @@ class Record extends Map implements ApiRecordContract
             unset($attributes['attributes']);
         }
 
+        $relationKeys = [];
+
         foreach ($attributes as $key => $value) {
             if (!is_array($value)) {
                 continue;
@@ -59,7 +61,14 @@ class Record extends Map implements ApiRecordContract
                 }, $value['records']));
 
                 $objectName = $this->relationshipObjectName($key) ?? $key;
-                $attributes[$objectName] = $mapped;
+
+                // Several relationships can share a child object (e.g. a lookup to the parent from
+                // two fields), so their records are combined rather than the last one replacing
+                // the others. A record reached through more than one of them is kept once.
+                $attributes[$objectName] = isset($relationKeys[$objectName])
+                    ? $this->mergeRelatedRecords($attributes[$objectName], $mapped)
+                    : $mapped;
+                $relationKeys[$objectName] = true;
 
                 if ($objectName !== $key) {
                     unset($attributes[$key]);
@@ -107,6 +116,30 @@ class Record extends Map implements ApiRecordContract
     public function getAttribute(string $key): mixed
     {
         return $this->get($key);
+    }
+
+    protected function mergeRelatedRecords(array $existing, array $records): array
+    {
+        $ids = array_flip(array_filter(array_map(
+            static fn ($record) => is_array($record) ? ($record['Id'] ?? null) : null,
+            $existing
+        ), 'is_string'));
+
+        foreach ($records as $record) {
+            $id = is_array($record) ? ($record['Id'] ?? null) : null;
+
+            if (is_string($id) && isset($ids[$id])) {
+                continue;
+            }
+
+            if (is_string($id)) {
+                $ids[$id] = true;
+            }
+
+            $existing[] = $record;
+        }
+
+        return $existing;
     }
 
     protected function relationshipObjectName(string $relation): ?string

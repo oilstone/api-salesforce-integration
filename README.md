@@ -189,6 +189,11 @@ $account = (new Repository('Account'))
     ->first();
 ```
 
+Records from API resources key related records by child object name, so
+`Memberships__r` arrives as `Membership__c`. Where two relationships share a
+child object (for example two lookups to the parent), their records are combined
+under that one key, and a record reached through both appears once.
+
 You can target specific fields on the related object using a colon syntax:
 
 ```php
